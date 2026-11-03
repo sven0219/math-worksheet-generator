@@ -68,9 +68,10 @@ let includeAnswers = false
 let copies = 1
 let worksheets: SheetCopy[] = makeWorksheets()
 let error = ''
+const homeUrl = new URL('.', window.location.href).href
 const siteBase = ['localhost', '127.0.0.1'].includes(window.location.hostname)
   ? 'https://sven0219.github.io/math-worksheet-generator/'
-  : new URL('.', window.location.href).href
+  : homeUrl
 const sharedSheet = decodeSheet(new URLSearchParams(window.location.search).get('sheet'))
 let qrImages: string[] = []
 let qrVersion = 0
@@ -166,7 +167,7 @@ function printPage(worksheet: Worksheet, page: number, copyIndex: number): strin
 
   return `<section class="paper paper-${paperStyle}" aria-label="试卷第 ${page + 1} 页">${pagePattern(paperStyle)}
     <div class="paper-top">
-      <div class="paper-heading"><div><span class="paper-kicker">${copies > 1 ? `第 ${copyIndex + 1} 份 · ` : ''}今天也要加油呀！</span><h2>数学计算练习卷</h2></div><div class="paper-heading-right"><a class="paper-qr" href="${sheetUrl(worksheets[copyIndex], copyIndex)}" aria-label="扫码查看这份试卷的答案">${qrImages[copyIndex] ? `<img src="${qrImages[copyIndex]}" alt="扫码查看这份试卷的答案" width="90" height="90">` : '<span>二维码生成中</span>'}</a><span class="paper-page">${page + 1} / ${settings.count / 50}</span></div></div>
+      <div class="paper-heading"><div><span class="paper-kicker">${copies > 1 ? `第 ${copyIndex + 1} 份 · ` : ''}今天也要加油呀！</span><h2>数学计算练习卷</h2></div><div class="paper-heading-right"><a class="paper-qr" href="${sheetUrl(worksheets[copyIndex], copyIndex)}" aria-label="扫码查看这份试卷的答案">${qrImages[copyIndex] ? `<img src="${qrImages[copyIndex]}" alt="扫码查看这份试卷的答案" width="90" height="90">` : '<span>二维码生成中</span>'}</a><span class="paper-qr-hint">扫码看答案</span><span class="paper-page">${page + 1} / ${settings.count / 50}</span></div></div>
       <p class="paper-subtitle">${settings.limit} 以内 · ${operationLabel} · 每题 ${settings.operands} 个数字</p>
       <div class="student-fields"><span>姓名：<i></i></span><span>日期：<i></i></span><span>年级：<i></i></span><span>得分：<i></i></span><span>用时：<i></i> 分</span></div>
     </div>
@@ -194,8 +195,8 @@ function answerPage(worksheet: Worksheet, copyIndex: number): string {
 function renderSharedAnswers(): void {
   if (!sharedSheet) return
   const { sheet, settings: sharedSettings, copy } = sharedSheet
-  app.innerHTML = `<main class="shared-answers"><div class="shared-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div><a href="${siteBase}">← 返回出题</a></div>
-    <div class="shared-intro"><span class="eyebrow">✦ 扫码核对答案</span><h1>这份练习卷的答案</h1><p>第 ${copy} 份 · ${sharedSettings.count} 道题 · ${sharedSettings.limit} 以内。按试卷题号对照，做错了也没关系，学会就好！</p></div>
+  app.innerHTML = `<main class="shared-answers"><div class="shared-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div><a href="${homeUrl}">← 返回出题</a></div>
+    <div class="shared-intro"><span class="eyebrow">✦ 扫码核对答案</span><h1>这份练习卷的答案</h1><p>第 ${copy} 份 · ${sharedSettings.count} 道题 · ${sharedSettings.limit} 以内。按试卷题号对照，做错了也没关系，学会就好！</p><a class="shared-start" href="${homeUrl}">✦ 我要出题 <span aria-hidden="true">↗</span></a></div>
     <div class="shared-grid">${sheet.worksheet.problems.map((problem, index) =>
       `<div class="shared-answer"><span class="shared-number">${index + 1}.</span><span>${problem.text} =</span><strong>${problem.answer}</strong></div>`
     ).join('')}</div><p class="shared-footer">每一题认真思考，都是一次进步 ✨</p></main>`
