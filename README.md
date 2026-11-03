@@ -34,7 +34,7 @@
 
 ![手机端答案列表及我要出题按钮](docs/screenshots/answers.png)
 
-本站域名为 **math.svenshen.me**。GitHub Pages 已部署，Cloudflare DNS 记录已设置；GitHub Pages 的 HTTPS 证书仍在签发中。证书生效前，请暂缓分享纸质试卷的二维码。
+本站地址：[**https://math.svenshen.me/**](https://math.svenshen.me/)。GitHub Pages 已部署并启用强制 HTTPS，Cloudflare 以 DNS only 模式将子域名指向 GitHub Pages。
 
 ## Fork 后如何部署
 
