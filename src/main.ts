@@ -167,7 +167,7 @@ function printPage(worksheet: Worksheet, page: number, copyIndex: number): strin
 
   return `<section class="paper paper-${paperStyle}" aria-label="试卷第 ${page + 1} 页">${pagePattern(paperStyle)}
     <div class="paper-top">
-      <div class="paper-heading"><div><span class="paper-kicker">${copies > 1 ? `第 ${copyIndex + 1} 份 · ` : ''}今天也要加油呀！</span><h2>数学计算练习卷</h2></div><div class="paper-heading-right"><a class="paper-qr" href="${sheetUrl(worksheets[copyIndex], copyIndex)}" aria-label="扫码查看这份试卷的答案">${qrImages[copyIndex] ? `<img src="${qrImages[copyIndex]}" alt="扫码查看这份试卷的答案" width="90" height="90">` : '<span>二维码生成中</span>'}</a><span class="paper-qr-hint">扫码看答案</span><span class="paper-page">${page + 1} / ${settings.count / 50}</span></div></div>
+      <div class="paper-heading"><div><span class="paper-kicker">${copies > 1 ? `第 ${copyIndex + 1} 份 · ` : ''}今天也要加油呀！</span><h2>数学计算练习卷</h2></div><div class="paper-heading-right"><span class="paper-qr-hint">扫码看答案</span><div class="paper-qr-stack"><a class="paper-qr" href="${sheetUrl(worksheets[copyIndex], copyIndex)}" aria-label="扫码查看这份试卷的答案">${qrImages[copyIndex] ? `<img src="${qrImages[copyIndex]}" alt="扫码查看这份试卷的答案" width="90" height="90">` : '<span>二维码生成中</span>'}</a><span class="paper-page">${page + 1} / ${settings.count / 50}</span></div></div></div>
       <p class="paper-subtitle">${settings.limit} 以内 · ${operationLabel} · 每题 ${settings.operands} 个数字</p>
       <div class="student-fields"><span>姓名：<i></i></span><span>日期：<i></i></span><span>年级：<i></i></span><span>得分：<i></i></span><span>用时：<i></i> 分</span></div>
     </div>
