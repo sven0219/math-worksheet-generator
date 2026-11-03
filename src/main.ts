@@ -60,7 +60,7 @@ function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settin
 }
 
 let settings: Settings = { count: 50, limit: 20, operations: ['+', '−'], operands: 2 }
-const limitPresets = [5, 10, 20, 50, 100, 200, 500, 1000]
+const limitPresets = [5, 10, 20, 50, 100, 200]
 let customLimit = 200
 let useCustomLimit = false
 let paperStyle: PaperStyle = 'plain'
@@ -197,8 +197,8 @@ function renderSharedAnswers(): void {
   const { sheet, settings: sharedSettings, copy } = sharedSheet
   app.innerHTML = `<main class="shared-answers"><div class="shared-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div><a href="${homeUrl}">← 返回出题</a></div>
     <div class="shared-intro"><span class="eyebrow">✦ 扫码核对答案</span><h1>这份练习卷的答案</h1><p>第 ${copy} 份 · ${sharedSettings.count} 道题 · ${sharedSettings.limit} 以内。按试卷题号对照，做错了也没关系，学会就好！</p><a class="shared-start" href="${homeUrl}">✦ 我要出题 <span aria-hidden="true">↗</span></a></div>
-    <div class="shared-grid">${sheet.worksheet.problems.map((problem, index) =>
-      `<div class="shared-answer"><span class="shared-number">${index + 1}.</span><span>${problem.text} =</span><strong>${problem.answer}</strong></div>`
+    <div class="shared-grid" style="--answer-screen-columns:${sharedSettings.operands === 2 ? 3 : 2}">${sheet.worksheet.problems.map((problem, index) =>
+      `<div class="shared-answer"><span class="shared-number">${index + 1}.</span><span class="shared-equation">${problem.text} <span class="shared-result">= <strong>${problem.answer}</strong></span></span></div>`
     ).join('')}</div><p class="shared-footer">每一题认真思考，都是一次进步 ✨</p></main>`
 }
 
@@ -218,7 +218,7 @@ function render(): void {
     <main class="workspace"><div class="workspace-heading"><div><span class="section-eyebrow">LET'S GET STARTED</span><h2>制作你的练习卷 <span aria-hidden="true">✏️</span></h2></div><p>简单几步，就能开始今天的数学冒险！</p></div>
       <div class="workspace-grid"><aside class="controls" aria-label="出题设置">
         <div class="control-card"><div class="card-title"><span class="title-icon peach">01</span><div><h3>今天练多少？</h3><p>选一个刚刚好的题量</p></div></div><fieldset><legend>每份题目数量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset><label class="custom-range">打印份数（每份题目不同）<input type="number" name="copies" min="1" max="10" step="1" value="${copies}" inputmode="numeric" ${settings.count === 100 ? 'disabled' : ''}></label>${settings.count === 100 ? '<p class="copies-hint">要打印多份不同试卷，请先选 50 题。</p>' : '<p class="copies-hint">每份 50 题，最多 10 份。</p>'}</div>
-        <div class="control-card"><div class="card-title"><span class="title-icon lavender">02</span><div><h3>数字到哪里？</h3><p>从简单开始，慢慢升级</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～1000）<input type="number" name="customLimit" min="2" max="1000" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
+        <div class="control-card"><div class="card-title"><span class="title-icon lavender">02</span><div><h3>数字到哪里？</h3><p>从简单开始，慢慢升级</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
         <div class="control-card"><div class="card-title"><span class="title-icon mint">03</span><div><h3>做什么运算？</h3><p>可以同时选好几种哦</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
           `<label class="choice op-choice"><input type="checkbox" name="operation" value="${operator}" ${settings.operations.includes(operator) ? 'checked' : ''}><span><b>${operator}</b>${operationNames[operator]}</span></label>`).join('')}</div></fieldset>
           <fieldset><legend>每道题几个数字？</legend><div class="choice-row">${([2, 3, 4] as OperandCount[]).map((n) => choice('operands', n, `${n} 个`, settings.operands === n)).join('')}</div></fieldset></div>
@@ -266,8 +266,8 @@ app.addEventListener('change', (event) => {
     }
     if (input.name === 'customLimit') {
       const requested = Number(input.value)
-      if (!Number.isInteger(requested) || requested < 2 || requested > 1000) {
-        error = '请输入 2～1000 之间的整数。'
+      if (!Number.isInteger(requested) || requested < 2 || requested > 200) {
+        error = '请输入 2～200 之间的整数。'
         render()
         return
       }
