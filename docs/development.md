@@ -1,6 +1,8 @@
 # 开发与提交前机密检查
 
-当前项目仅有文档。提交或推送前不强制运行单元测试；实现代码后可以按需编写并运行测试。
+项目采用 Vite + TypeScript。安装依赖：`npm ci`；本地运行：`npm run dev`；生产构建与类型检查：`npm run build`。提交或推送前不强制运行单元测试。
+
+试卷二维码使用版本号、出题设置和随机种子重建答案。改动 `src/generator.ts` 中的出题顺序或 `src/main.ts` 的伪随机算法时，必须保留旧版本链接的解码与出题方式，否则旧试卷扫码答案可能不一致。
 
 首次使用时安装 [Gitleaks](https://github.com/gitleaks/gitleaks)（例如 macOS 上运行 `brew install gitleaks`），确认 `gitleaks version` 可运行。
 
