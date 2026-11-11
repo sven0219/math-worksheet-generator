@@ -3,9 +3,12 @@ import QRCode from 'qrcode'
 import {
   generateWorksheet,
   generateWorksheetV1,
+  generateWorksheetV2,
+  type AdditionRegrouping,
   type Operation,
   type OperandCount,
   type Settings,
+  type SubtractionRegrouping,
   type Worksheet,
 } from './generator'
 
@@ -23,6 +26,12 @@ const operationNames: Record<Operation, string> = {
 }
 const operationSymbols: Operation[] = ['+', '−', '×', '÷']
 const paperStyles: PaperStyle[] = ['plain', 'squares', 'lines', 'dots', 'tianzi']
+const additionRegroupingOptions: Array<[AdditionRegrouping, string]> = [
+  ['any', '随机'], ['without-carry', '不进位'], ['with-carry', '必须进位'],
+]
+const subtractionRegroupingOptions: Array<[SubtractionRegrouping, string]> = [
+  ['any', '随机'], ['without-borrow', '不退位'], ['with-borrow', '必须退位'],
+]
 
 interface SheetCopy { seed: number; worksheet: Worksheet }
 
@@ -46,9 +55,12 @@ function newSeed(): number {
 
 function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settings; copy: number } | null {
   if (!value) return null
-  const match = /^([12])\.(50|100)\.(\d{1,4})\.([234])\.([1-9]|1[0-5])\.([0-9a-z]+)\.([1-9]|10)$/.exec(value)
-  if (!match) return null
-  const [, versionText, countText, limitText, operandsText, maskText, seedText, copyText] = match
+  const legacyMatch = /^([12])\.(50|100)\.(\d{1,4})\.([234])\.([1-9]|1[0-5])\.([0-9a-z]+)\.([1-9]|10)$/.exec(value)
+  const currentMatch = /^3\.(50|100)\.(\d{1,4})\.([234])\.([1-9]|1[0-5])\.([0-2])\.([0-2])\.([0-9a-z]+)\.([1-9]|10)$/.exec(value)
+  if (!legacyMatch && !currentMatch) return null
+  const [versionText, countText, limitText, operandsText, maskText, additionText, subtractionText, seedText, copyText] = currentMatch
+    ? ['3', ...currentMatch.slice(1)]
+    : [legacyMatch![1], ...legacyMatch!.slice(2, 6), '0', '0', ...legacyMatch!.slice(6)]
   const seed = Number.parseInt(seedText, 36)
   const limit = Number(limitText)
   if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff || limit < 2 || limit > 1000) return null
@@ -58,8 +70,12 @@ function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settin
     limit,
     operands: Number(operandsText) as OperandCount,
     operations: operationSymbols.filter((_, index) => mask & (1 << index)),
+    additionRegrouping: additionRegroupingOptions[Number(additionText)]?.[0] ?? 'any',
+    subtractionRegrouping: subtractionRegroupingOptions[Number(subtractionText)]?.[0] ?? 'any',
   }
-  const generator = versionText === '1' ? generateWorksheetV1 : generateWorksheet
+  const generator = versionText === '1'
+    ? generateWorksheetV1
+    : versionText === '2' ? generateWorksheetV2 : generateWorksheet
   return {
     sheet: { seed, worksheet: generator(decodedSettings, seededRandom(seed)) },
     settings: decodedSettings,
@@ -67,7 +83,14 @@ function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settin
   }
 }
 
-let settings: Settings = { count: 50, limit: 20, operations: ['+', '−'], operands: 2 }
+let settings: Settings = {
+  count: 50,
+  limit: 20,
+  operations: ['+', '−'],
+  operands: 2,
+  additionRegrouping: 'any',
+  subtractionRegrouping: 'any',
+}
 const limitPresets = [5, 10, 20, 50, 100, 200]
 let customLimit = 200
 let useCustomLimit = false
@@ -93,16 +116,16 @@ function choice(name: string, value: string | number, label: string, selected: b
   return `<label class="choice"><input type="radio" name="${name}" value="${value}" ${selected ? 'checked' : ''}><span>${label}</span></label>`
 }
 
-function makeWorksheets(): SheetCopy[] {
+function makeWorksheets(worksheetSettings: Settings = settings): SheetCopy[] {
   const result: SheetCopy[] = []
   const signatures = new Set<string>()
   for (let copy = 0; copy < copies; copy++) {
     let seed = newSeed()
-    let worksheet = generateWorksheet(settings, seededRandom(seed))
+    let worksheet = generateWorksheet(worksheetSettings, seededRandom(seed))
     let signature = [...new Set(worksheet.problems.map((problem) => problem.text))].sort().join('|')
     for (let attempt = 0; attempt < 20 && signatures.has(signature); attempt++) {
       seed = newSeed()
-      worksheet = generateWorksheet(settings, seededRandom(seed))
+      worksheet = generateWorksheet(worksheetSettings, seededRandom(seed))
       signature = [...new Set(worksheet.problems.map((problem) => problem.text))].sort().join('|')
     }
     signatures.add(signature)
@@ -120,8 +143,10 @@ function hasDuplicateCopies(): boolean {
 function sheetUrl(sheet: SheetCopy, copyIndex: number): string {
   const mask = operationSymbols.reduce((value, operation, index) =>
     value | (settings.operations.includes(operation) ? 1 << index : 0), 0)
+  const additionMode = additionRegroupingOptions.findIndex(([mode]) => mode === settings.additionRegrouping)
+  const subtractionMode = subtractionRegroupingOptions.findIndex(([mode]) => mode === settings.subtractionRegrouping)
   const url = new URL(siteBase)
-  url.searchParams.set('sheet', `2.${settings.count}.${settings.limit}.${settings.operands}.${mask}.${sheet.seed.toString(36)}.${copyIndex + 1}`)
+  url.searchParams.set('sheet', `3.${settings.count}.${settings.limit}.${settings.operands}.${mask}.${additionMode}.${subtractionMode}.${sheet.seed.toString(36)}.${copyIndex + 1}`)
   return url.href
 }
 
@@ -229,6 +254,11 @@ function render(): void {
         <div class="control-card"><div class="card-title"><span class="title-icon lavender">02</span><div><h3>数字到哪里？</h3><p>从简单开始，慢慢升级</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
         <div class="control-card"><div class="card-title"><span class="title-icon mint">03</span><div><h3>做什么运算？</h3><p>可以同时选好几种哦</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
           `<label class="choice op-choice"><input type="checkbox" name="operation" value="${operator}" ${settings.operations.includes(operator) ? 'checked' : ''}><span><b>${operator}</b>${operationNames[operator]}</span></label>`).join('')}</div></fieldset>
+          ${settings.operations.includes('+') ? `<fieldset class="regrouping-field"><legend>加法进位</legend><div class="choice-row compact-choices">${additionRegroupingOptions.map(([mode, label]) =>
+            choice('additionRegrouping', mode, label, settings.additionRegrouping === mode)).join('')}</div></fieldset>` : ''}
+          ${settings.operations.includes('−') ? `<fieldset class="regrouping-field"><legend>减法退位</legend><div class="choice-row compact-choices">${subtractionRegroupingOptions.map(([mode, label]) =>
+            choice('subtractionRegrouping', mode, label, settings.subtractionRegrouping === mode)).join('')}</div></fieldset>` : ''}
+          ${settings.operations.includes('+') || settings.operations.includes('−') ? '<p class="regrouping-hint">多数字题中的每一步都会遵守所选规则。</p>' : ''}
           <fieldset><legend>每道题几个数字？</legend><div class="choice-row">${([2, 3, 4] as OperandCount[]).map((n) => choice('operands', n, `${n} 个`, settings.operands === n)).join('')}</div></fieldset></div>
         <div class="control-card"><div class="card-title"><span class="title-icon yellow">04</span><div><h3>挑一张喜欢的纸</h3><p>每一种都适合写写算算</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
           `<label class="style-choice"><input type="radio" name="style" value="${style}" ${paperStyle === style ? 'checked' : ''}><span><b aria-hidden="true">${styleIcons[style]}</b>${styleLabels[style]}</span></label>`).join('')}</div></fieldset></div>
@@ -237,8 +267,8 @@ function render(): void {
         <button class="generate-button" type="button" data-action="generate">✦ &nbsp;生成新试卷</button>
       </aside>
        <section class="preview-section" aria-label="试卷预览"><div class="preview-toolbar"><div><span class="preview-label">✦ 实时预览</span><h3>你的专属练习卷</h3><p>${settings.count} 道题 × ${copies} 份 · ${pages * copies} 张题目 A4 · ${styleLabels[paperStyle]}</p></div><button class="print-button" type="button" data-action="print" ${duplicateCopies || qrImages.length !== worksheets.length ? 'disabled' : ''}>打印试卷 <span aria-hidden="true">↗</span></button></div>
-        ${repeated ? `<p class="status notice" role="status">当前设置可生成的不同题目不足，试卷中共有 ${repeated} 道重复题。试试增加数字范围、运算方式或数字个数吧。</p>` : ''}
-        ${duplicateCopies ? '<p class="status error" role="alert">当前设置可用的不同题目太少，无法保证每份试卷不同。请扩大范围、增加运算方式，或减少份数。</p>' : ''}
+        ${repeated ? `<p class="status notice" role="status">当前设置可生成的不同题目不足，试卷中共有 ${repeated} 道重复题。试试增加数字范围、运算方式、数字个数，或放宽进退位规则吧。</p>` : ''}
+        ${duplicateCopies ? '<p class="status error" role="alert">当前设置可用的不同题目太少，无法保证每份试卷不同。请扩大范围、增加运算方式、放宽进退位规则，或减少份数。</p>' : ''}
         <div class="preview-note">💡 &nbsp;打印时选择 A4 纸、100% 缩放，并关闭浏览器页眉和页脚；扫描每张试卷右上角的二维码，可在网页查看该份试卷的答案。</div>
         <div class="paper-scroll">${worksheets.map(({ worksheet }, copyIndex) => Array.from({ length: pages }, (_, page) => printPage(worksheet, page, copyIndex)).join('')).join('')}${includeAnswers ? worksheets.map(({ worksheet }, copyIndex) => answerPage(worksheet, copyIndex)).join('') : ''}</div>
       </section></div>
@@ -254,6 +284,9 @@ app.addEventListener('change', (event) => {
   } else if (input.name === 'answers') {
     includeAnswers = input.checked
   } else {
+    const previousCopies = copies
+    const previousCustomLimit = customLimit
+    const previousUseCustomLimit = useCustomLimit
     const updated = { ...settings }
     if (input.name === 'count') {
       updated.count = Number(input.value) as Settings['count']
@@ -284,6 +317,12 @@ app.addEventListener('change', (event) => {
       updated.limit = requested
     }
     if (input.name === 'operands') updated.operands = Number(input.value) as OperandCount
+    if (input.name === 'additionRegrouping') {
+      updated.additionRegrouping = input.value as AdditionRegrouping
+    }
+    if (input.name === 'subtractionRegrouping') {
+      updated.subtractionRegrouping = input.value as SubtractionRegrouping
+    }
     if (input.name === 'operation') {
       updated.operations = operationSymbols.filter((symbol) =>
         [...app.querySelectorAll<HTMLInputElement>('input[name="operation"]')]
@@ -295,8 +334,18 @@ app.addEventListener('change', (event) => {
         return
       }
     }
-    settings = updated
-    worksheets = makeWorksheets()
+    try {
+      const generated = makeWorksheets(updated)
+      settings = updated
+      worksheets = generated
+    } catch (cause) {
+      copies = previousCopies
+      customLimit = previousCustomLimit
+      useCustomLimit = previousUseCustomLimit
+      error = cause instanceof Error ? cause.message : '当前设置无法生成题目，请调整后重试。'
+      render()
+      return
+    }
     updateQrImages()
   }
   error = ''
@@ -308,7 +357,14 @@ app.addEventListener('click', (event) => {
   if (!button) return
   if (button.dataset.action === 'print' && !hasDuplicateCopies() && qrImages.length === worksheets.length) window.print()
   if (button.dataset.action === 'generate') {
-    worksheets = makeWorksheets()
+    try {
+      worksheets = makeWorksheets()
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : '当前设置无法生成题目，请调整后重试。'
+      render()
+      return
+    }
+    error = ''
     updateQrImages()
     render()
     document.querySelector('.preview-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })

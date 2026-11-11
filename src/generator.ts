@@ -1,11 +1,15 @@
 export type Operation = '+' | '−' | '×' | '÷'
 export type OperandCount = 2 | 3 | 4
+export type AdditionRegrouping = 'any' | 'without-carry' | 'with-carry'
+export type SubtractionRegrouping = 'any' | 'without-borrow' | 'with-borrow'
 
 export interface Settings {
   count: 50 | 100
   limit: number
   operations: Operation[]
   operands: OperandCount
+  additionRegrouping: AdditionRegrouping
+  subtractionRegrouping: SubtractionRegrouping
 }
 
 export type Expression =
@@ -74,7 +78,48 @@ function hasHighPrecedence(operator: Operation): boolean {
   return operator === '×' || operator === '÷'
 }
 
-function makeProblem(settings: Settings, random: () => number): Problem {
+function hasCarry(left: number, right: number): boolean {
+  while (left > 0 || right > 0) {
+    if (left % 10 + right % 10 >= 10) return true
+    left = Math.floor(left / 10)
+    right = Math.floor(right / 10)
+  }
+  return false
+}
+
+function hasBorrow(left: number, right: number): boolean {
+  while (left > 0 || right > 0) {
+    if (left % 10 < right % 10) return true
+    left = Math.floor(left / 10)
+    right = Math.floor(right / 10)
+  }
+  return false
+}
+
+function matchesRegrouping(
+  operator: Operation,
+  left: number,
+  right: number,
+  settings: Settings,
+): boolean {
+  if (operator === '+') {
+    const carries = hasCarry(left, right)
+    return settings.additionRegrouping === 'any' ||
+      (settings.additionRegrouping === 'with-carry' ? carries : !carries)
+  }
+  if (operator === '−') {
+    const borrows = hasBorrow(left, right)
+    return settings.subtractionRegrouping === 'any' ||
+      (settings.subtractionRegrouping === 'with-borrow' ? borrows : !borrows)
+  }
+  return true
+}
+
+function makeProblem(
+  settings: Settings,
+  random: () => number,
+  enforceRegrouping: boolean,
+): Problem | null {
   let term: Expression = {
     kind: 'number',
     value: randomInt(1, settings.limit, random),
@@ -94,16 +139,25 @@ function makeProblem(settings: Settings, random: () => number): Problem {
               const nextTerm = apply(operator, term.value, operand)
               if (completed === null || pending === null) return true
               const nextValue = apply(pending, completed.value, nextTerm)
-              return Number.isInteger(nextValue) && nextValue >= 0 && nextValue <= settings.limit
+              return Number.isInteger(nextValue) && nextValue >= 0 && nextValue <= settings.limit &&
+                (!enforceRegrouping || matchesRegrouping(pending, completed.value, nextTerm, settings))
             })
-          : options(operator, expression.value, settings.limit),
+          : options(operator, expression.value, settings.limit).filter((operand) =>
+              !enforceRegrouping || matchesRegrouping(operator, expression.value, operand, settings)),
       }))
       .filter(({ choices }) => choices.length > 0)
 
     // At a boundary, a harmless identity is preferable to a negative or fractional answer.
+    const fallbackOperations = settings.operations.filter((operator) => {
+      if (!enforceRegrouping) return true
+      if (!hasHighPrecedence(operator)) return matchesRegrouping(operator, expression.value, 0, settings)
+      if (completed === null || pending === null) return true
+      return matchesRegrouping(pending, completed.value, term.value, settings)
+    })
+    if (!available.length && !fallbackOperations.length) return null
     const selected = available.length
       ? available[randomInt(0, available.length - 1, random)]
-      : { operator: settings.operations[randomInt(0, settings.operations.length - 1, random)], choices: [] }
+      : { operator: fallbackOperations[randomInt(0, fallbackOperations.length - 1, random)], choices: [] }
     const operand = selected.choices.length
       ? selected.choices[randomInt(0, selected.choices.length - 1, random)]
       : hasHighPrecedence(selected.operator) ? 1 : 0
@@ -186,7 +240,7 @@ function keyFor(problem: Problem): string {
 function generate(
   settings: Settings,
   random: () => number,
-  problemFactory: (settings: Settings, random: () => number) => Problem,
+  problemFactory: (settings: Settings, random: () => number) => Problem | null,
 ): Worksheet {
   if (!Number.isInteger(settings.limit) || settings.limit < 2 || settings.limit > 1000) {
     throw new Error('数字范围必须是 2 到 1000 之间的整数')
@@ -198,6 +252,7 @@ function generate(
 
   for (let i = 0; i < attempts && problems.length < settings.count; i++) {
     const problem = problemFactory(settings, random)
+    if (!problem) continue
     const key = keyFor(problem)
     if (seen.has(key)) continue
     seen.add(key)
@@ -205,6 +260,9 @@ function generate(
   }
 
   const unique = problems.length
+  if (!unique) {
+    throw new Error('当前数字范围、运算方式和进退位设置无法生成题目，请放宽条件。')
+  }
   // Some combinations, e.g. 10以内 / only division / 100 questions, have too few distinct expressions.
   while (problems.length < settings.count) {
     problems.push(problems[randomInt(0, unique - 1, random)])
@@ -214,7 +272,13 @@ function generate(
 }
 
 export function generateWorksheet(settings: Settings, random: () => number = Math.random): Worksheet {
-  return generate(settings, random, makeProblem)
+  return generate(settings, random, (currentSettings, currentRandom) =>
+    makeProblem(currentSettings, currentRandom, true))
+}
+
+export function generateWorksheetV2(settings: Settings, random: () => number = Math.random): Worksheet {
+  return generate(settings, random, (currentSettings, currentRandom) =>
+    makeProblem(currentSettings, currentRandom, false))
 }
 
 export function generateWorksheetV1(settings: Settings, random: () => number = Math.random): Worksheet {
