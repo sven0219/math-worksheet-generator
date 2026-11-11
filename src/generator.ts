@@ -26,10 +26,17 @@ export interface Worksheet {
 const randomInt = (min: number, max: number, random: () => number): number =>
   min + Math.floor(random() * (max - min + 1))
 
-export function formatExpression(expression: Expression, nested = false): string {
+export function formatExpression(expression: Expression): string {
   if (expression.kind === 'number') return String(expression.value)
-  const left = formatExpression(expression.left, expression.left.kind === 'operation')
+  const left = formatExpression(expression.left)
   const right = formatExpression(expression.right)
+  return `${left} ${expression.operator} ${right}`
+}
+
+function formatLegacyExpression(expression: Expression, nested = false): string {
+  if (expression.kind === 'number') return String(expression.value)
+  const left = formatLegacyExpression(expression.left, expression.left.kind === 'operation')
+  const right = formatLegacyExpression(expression.right)
   const result = `${left} ${expression.operator} ${right}`
   return nested ? `(${result})` : result
 }
@@ -63,7 +70,81 @@ function apply(operator: Operation, left: number, right: number): number {
   }
 }
 
+function hasHighPrecedence(operator: Operation): boolean {
+  return operator === '×' || operator === '÷'
+}
+
 function makeProblem(settings: Settings, random: () => number): Problem {
+  let term: Expression = {
+    kind: 'number',
+    value: randomInt(1, settings.limit, random),
+  }
+  let expression: Expression = term
+  let completed: Expression | null = null
+  let pending: Operation | null = null
+
+  for (let step = 1; step < settings.operands; step++) {
+    // Keep the current multiplication/division term separate from the completed
+    // addition/subtraction side so the tree follows conventional precedence.
+    const available = settings.operations
+      .map((operator) => ({
+        operator,
+        choices: hasHighPrecedence(operator)
+          ? options(operator, term.value, settings.limit).filter((operand) => {
+              const nextTerm = apply(operator, term.value, operand)
+              if (completed === null || pending === null) return true
+              const nextValue = apply(pending, completed.value, nextTerm)
+              return Number.isInteger(nextValue) && nextValue >= 0 && nextValue <= settings.limit
+            })
+          : options(operator, expression.value, settings.limit),
+      }))
+      .filter(({ choices }) => choices.length > 0)
+
+    // At a boundary, a harmless identity is preferable to a negative or fractional answer.
+    const selected = available.length
+      ? available[randomInt(0, available.length - 1, random)]
+      : { operator: settings.operations[randomInt(0, settings.operations.length - 1, random)], choices: [] }
+    const operand = selected.choices.length
+      ? selected.choices[randomInt(0, selected.choices.length - 1, random)]
+      : hasHighPrecedence(selected.operator) ? 1 : 0
+    const operandExpression: Expression = { kind: 'number', value: operand }
+
+    if (hasHighPrecedence(selected.operator)) {
+      term = {
+        kind: 'operation',
+        operator: selected.operator,
+        left: term,
+        right: operandExpression,
+        value: apply(selected.operator, term.value, operand),
+      }
+      expression = completed !== null && pending !== null
+        ? {
+            kind: 'operation',
+            operator: pending,
+            left: completed,
+            right: term,
+            value: apply(pending, completed.value, term.value),
+          }
+        : term
+    } else {
+      completed = expression
+      pending = selected.operator
+      term = operandExpression
+      expression = {
+        kind: 'operation',
+        operator: selected.operator,
+        left: completed,
+        right: term,
+        value: apply(selected.operator, completed.value, term.value),
+      }
+    }
+  }
+
+  return { expression, text: formatExpression(expression), answer: expression.value }
+}
+
+// Keep the original algorithm for QR links printed before unparenthesized expressions.
+function makeLegacyProblem(settings: Settings, random: () => number): Problem {
   let expression: Expression = {
     kind: 'number',
     value: randomInt(1, settings.limit, random),
@@ -74,7 +155,6 @@ function makeProblem(settings: Settings, random: () => number): Problem {
       .map((operator) => ({ operator, choices: options(operator, expression.value, settings.limit) }))
       .filter(({ choices }) => choices.length > 0)
 
-    // At a boundary, a harmless identity is preferable to a negative or fractional answer.
     const selected = available.length
       ? available[randomInt(0, available.length - 1, random)]
       : { operator: settings.operations[randomInt(0, settings.operations.length - 1, random)], choices: [] }
@@ -91,7 +171,7 @@ function makeProblem(settings: Settings, random: () => number): Problem {
     }
   }
 
-  return { expression, text: formatExpression(expression), answer: expression.value }
+  return { expression, text: formatLegacyExpression(expression), answer: expression.value }
 }
 
 function keyFor(problem: Problem): string {
@@ -103,7 +183,11 @@ function keyFor(problem: Problem): string {
   return problem.text
 }
 
-export function generateWorksheet(settings: Settings, random: () => number = Math.random): Worksheet {
+function generate(
+  settings: Settings,
+  random: () => number,
+  problemFactory: (settings: Settings, random: () => number) => Problem,
+): Worksheet {
   if (!Number.isInteger(settings.limit) || settings.limit < 2 || settings.limit > 1000) {
     throw new Error('数字范围必须是 2 到 1000 之间的整数')
   }
@@ -113,7 +197,7 @@ export function generateWorksheet(settings: Settings, random: () => number = Mat
   const attempts = settings.count * 80
 
   for (let i = 0; i < attempts && problems.length < settings.count; i++) {
-    const problem = makeProblem(settings, random)
+    const problem = problemFactory(settings, random)
     const key = keyFor(problem)
     if (seen.has(key)) continue
     seen.add(key)
@@ -127,4 +211,12 @@ export function generateWorksheet(settings: Settings, random: () => number = Mat
   }
 
   return { problems, repeated: settings.count - unique }
+}
+
+export function generateWorksheet(settings: Settings, random: () => number = Math.random): Worksheet {
+  return generate(settings, random, makeProblem)
+}
+
+export function generateWorksheetV1(settings: Settings, random: () => number = Math.random): Worksheet {
+  return generate(settings, random, makeLegacyProblem)
 }

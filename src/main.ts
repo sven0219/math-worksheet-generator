@@ -1,6 +1,13 @@
 import './style.css'
 import QRCode from 'qrcode'
-import { generateWorksheet, type Operation, type OperandCount, type Settings, type Worksheet } from './generator'
+import {
+  generateWorksheet,
+  generateWorksheetV1,
+  type Operation,
+  type OperandCount,
+  type Settings,
+  type Worksheet,
+} from './generator'
 
 type PaperStyle = 'plain' | 'squares' | 'lines' | 'dots' | 'tianzi'
 
@@ -20,7 +27,7 @@ const paperStyles: PaperStyle[] = ['plain', 'squares', 'lines', 'dots', 'tianzi'
 interface SheetCopy { seed: number; worksheet: Worksheet }
 
 function seededRandom(seed: number): () => number {
-  // Worksheet QR links use v1 + this PRNG; retain a v1 decoder if the generator changes.
+  // Worksheet QR links use a versioned generator + this PRNG.
   let state = seed >>> 0
   return () => {
     state = (state + 0x6d2b79f5) >>> 0
@@ -39,9 +46,9 @@ function newSeed(): number {
 
 function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settings; copy: number } | null {
   if (!value) return null
-  const match = /^1\.(50|100)\.(\d{1,4})\.([234])\.([1-9]|1[0-5])\.([0-9a-z]+)\.([1-9]|10)$/.exec(value)
+  const match = /^([12])\.(50|100)\.(\d{1,4})\.([234])\.([1-9]|1[0-5])\.([0-9a-z]+)\.([1-9]|10)$/.exec(value)
   if (!match) return null
-  const [, countText, limitText, operandsText, maskText, seedText, copyText] = match
+  const [, versionText, countText, limitText, operandsText, maskText, seedText, copyText] = match
   const seed = Number.parseInt(seedText, 36)
   const limit = Number(limitText)
   if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff || limit < 2 || limit > 1000) return null
@@ -52,8 +59,9 @@ function decodeSheet(value: string | null): { sheet: SheetCopy; settings: Settin
     operands: Number(operandsText) as OperandCount,
     operations: operationSymbols.filter((_, index) => mask & (1 << index)),
   }
+  const generator = versionText === '1' ? generateWorksheetV1 : generateWorksheet
   return {
-    sheet: { seed, worksheet: generateWorksheet(decodedSettings, seededRandom(seed)) },
+    sheet: { seed, worksheet: generator(decodedSettings, seededRandom(seed)) },
     settings: decodedSettings,
     copy: Number(copyText),
   }
@@ -113,7 +121,7 @@ function sheetUrl(sheet: SheetCopy, copyIndex: number): string {
   const mask = operationSymbols.reduce((value, operation, index) =>
     value | (settings.operations.includes(operation) ? 1 << index : 0), 0)
   const url = new URL(siteBase)
-  url.searchParams.set('sheet', `1.${settings.count}.${settings.limit}.${settings.operands}.${mask}.${sheet.seed.toString(36)}.${copyIndex + 1}`)
+  url.searchParams.set('sheet', `2.${settings.count}.${settings.limit}.${settings.operands}.${mask}.${sheet.seed.toString(36)}.${copyIndex + 1}`)
   return url.href
 }
 
