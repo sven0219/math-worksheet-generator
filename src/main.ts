@@ -13,6 +13,14 @@ import {
 } from './generator'
 
 type PaperStyle = 'plain' | 'squares' | 'lines' | 'dots' | 'tianzi'
+type PresetId = 'preschool' | 'grade1-first' | 'grade1-second' | 'grade2' | 'custom'
+
+interface SettingsPreset {
+  id: Exclude<PresetId, 'custom'>
+  label: string
+  description: string
+  settings: Pick<Settings, 'limit' | 'operations' | 'operands' | 'additionRegrouping' | 'subtractionRegrouping'>
+}
 
 const styleLabels: Record<PaperStyle, string> = {
   plain: '清爽白纸', squares: '数学方格', lines: '整齐横线',
@@ -31,6 +39,36 @@ const additionRegroupingOptions: Array<[AdditionRegrouping, string]> = [
 ]
 const subtractionRegroupingOptions: Array<[SubtractionRegrouping, string]> = [
   ['any', '随机'], ['without-borrow', '不退位'], ['with-borrow', '必须退位'],
+]
+const settingsPresets: SettingsPreset[] = [
+  {
+    id: 'preschool', label: '幼小衔接', description: '10 以内加减',
+    settings: {
+      limit: 10, operations: ['+', '−'], operands: 2,
+      additionRegrouping: 'any', subtractionRegrouping: 'any',
+    },
+  },
+  {
+    id: 'grade1-first', label: '一年级上', description: '20 以内加减',
+    settings: {
+      limit: 20, operations: ['+', '−'], operands: 2,
+      additionRegrouping: 'any', subtractionRegrouping: 'any',
+    },
+  },
+  {
+    id: 'grade1-second', label: '一年级下', description: '100 以内加减',
+    settings: {
+      limit: 100, operations: ['+', '−'], operands: 2,
+      additionRegrouping: 'any', subtractionRegrouping: 'any',
+    },
+  },
+  {
+    id: 'grade2', label: '二年级', description: '100 以内四则',
+    settings: {
+      limit: 100, operations: ['+', '−', '×', '÷'], operands: 2,
+      additionRegrouping: 'any', subtractionRegrouping: 'any',
+    },
+  },
 ]
 
 interface SheetCopy { seed: number; worksheet: Worksheet }
@@ -94,6 +132,7 @@ let settings: Settings = {
 const limitPresets = [5, 10, 20, 50, 100, 200]
 let customLimit = 200
 let useCustomLimit = false
+let activePreset: PresetId = 'grade1-first'
 let paperStyle: PaperStyle = 'plain'
 let includeAnswers = false
 let copies = 1
@@ -114,6 +153,10 @@ const app = document.querySelector<HTMLDivElement>('#app')!
 
 function choice(name: string, value: string | number, label: string, selected: boolean): string {
   return `<label class="choice"><input type="radio" name="${name}" value="${value}" ${selected ? 'checked' : ''}><span>${label}</span></label>`
+}
+
+function presetChoice(id: PresetId, label: string, description: string): string {
+  return `<label class="preset-choice"><input type="radio" name="preset" value="${id}" ${activePreset === id ? 'checked' : ''}><span><b>${label}</b><small>${description}</small></span></label>`
 }
 
 function makeWorksheets(worksheetSettings: Settings = settings): SheetCopy[] {
@@ -250,9 +293,11 @@ function render(): void {
     </div></header>
     <main class="workspace"><div class="workspace-heading"><div><span class="section-eyebrow">LET'S GET STARTED</span><h2>制作你的练习卷 <span aria-hidden="true">✏️</span></h2></div><p>简单几步，就能开始今天的数学冒险！</p></div>
       <div class="workspace-grid"><aside class="controls" aria-label="出题设置">
-        <div class="control-card"><div class="card-title"><span class="title-icon peach">01</span><div><h3>今天练多少？</h3><p>选一个刚刚好的题量</p></div></div><fieldset><legend>每份题目数量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset><label class="custom-range">打印份数（每份题目不同）<input type="number" name="copies" min="1" max="10" step="1" value="${copies}" inputmode="numeric" ${settings.count === 100 ? 'disabled' : ''}></label>${settings.count === 100 ? '<p class="copies-hint">要打印多份不同试卷，请先选 50 题。</p>' : '<p class="copies-hint">每份 50 题，最多 10 份。</p>'}</div>
-        <div class="control-card"><div class="card-title"><span class="title-icon lavender">02</span><div><h3>数字到哪里？</h3><p>从简单开始，慢慢升级</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
-        <div class="control-card"><div class="card-title"><span class="title-icon mint">03</span><div><h3>做什么运算？</h3><p>可以同时选好几种哦</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
+        <div class="control-card preset-card"><div class="card-title"><span class="title-icon blue">01</span><div><h3>现在学到哪儿？</h3><p>一键选择适合的练习难度</p></div></div><fieldset><legend>年级与难度预设</legend><div class="preset-grid">${settingsPresets.map((preset) =>
+          presetChoice(preset.id, preset.label, preset.description)).join('')}${presetChoice('custom', '自定义', '保留当前设置')}</div></fieldset><p class="preset-hint">预设只调整范围、运算和数字个数，选好后仍可继续修改。</p></div>
+        <div class="control-card"><div class="card-title"><span class="title-icon peach">02</span><div><h3>今天练多少？</h3><p>选一个刚刚好的题量</p></div></div><fieldset><legend>每份题目数量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset><label class="custom-range">打印份数（每份题目不同）<input type="number" name="copies" min="1" max="10" step="1" value="${copies}" inputmode="numeric" ${settings.count === 100 ? 'disabled' : ''}></label>${settings.count === 100 ? '<p class="copies-hint">要打印多份不同试卷，请先选 50 题。</p>' : '<p class="copies-hint">每份 50 题，最多 10 份。</p>'}</div>
+        <div class="control-card"><div class="card-title"><span class="title-icon lavender">03</span><div><h3>数字到哪里？</h3><p>从简单开始，慢慢升级</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
+        <div class="control-card"><div class="card-title"><span class="title-icon mint">04</span><div><h3>做什么运算？</h3><p>可以同时选好几种哦</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
           `<label class="choice op-choice"><input type="checkbox" name="operation" value="${operator}" ${settings.operations.includes(operator) ? 'checked' : ''}><span><b>${operator}</b>${operationNames[operator]}</span></label>`).join('')}</div></fieldset>
           ${settings.operations.includes('+') ? `<fieldset class="regrouping-field"><legend>加法进位</legend><div class="choice-row compact-choices">${additionRegroupingOptions.map(([mode, label]) =>
             choice('additionRegrouping', mode, label, settings.additionRegrouping === mode)).join('')}</div></fieldset>` : ''}
@@ -260,7 +305,7 @@ function render(): void {
             choice('subtractionRegrouping', mode, label, settings.subtractionRegrouping === mode)).join('')}</div></fieldset>` : ''}
           ${settings.operations.includes('+') || settings.operations.includes('−') ? '<p class="regrouping-hint">多数字题中的每一步都会遵守所选规则。</p>' : ''}
           <fieldset><legend>每道题几个数字？</legend><div class="choice-row">${([2, 3, 4] as OperandCount[]).map((n) => choice('operands', n, `${n} 个`, settings.operands === n)).join('')}</div></fieldset></div>
-        <div class="control-card"><div class="card-title"><span class="title-icon yellow">04</span><div><h3>挑一张喜欢的纸</h3><p>每一种都适合写写算算</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
+        <div class="control-card"><div class="card-title"><span class="title-icon yellow">05</span><div><h3>挑一张喜欢的纸</h3><p>每一种都适合写写算算</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
           `<label class="style-choice"><input type="radio" name="style" value="${style}" ${paperStyle === style ? 'checked' : ''}><span><b aria-hidden="true">${styleIcons[style]}</b>${styleLabels[style]}</span></label>`).join('')}</div></fieldset></div>
         <label class="answer-toggle"><input type="checkbox" name="answers" ${includeAnswers ? 'checked' : ''}><span><b>附上答案页</b><small>每份试卷各对应一张 A4 答案纸</small></span></label>
         ${error ? `<p class="status error" role="alert">${error}</p>` : ''}
@@ -287,7 +332,22 @@ app.addEventListener('change', (event) => {
     const previousCopies = copies
     const previousCustomLimit = customLimit
     const previousUseCustomLimit = useCustomLimit
+    const previousPreset = activePreset
     const updated = { ...settings }
+    if (input.name === 'preset') {
+      const selectedPreset = input.value as PresetId
+      if (selectedPreset === 'custom') {
+        activePreset = 'custom'
+        error = ''
+        render()
+        return
+      }
+      const preset = settingsPresets.find(({ id }) => id === selectedPreset)
+      if (!preset) return
+      Object.assign(updated, preset.settings)
+      activePreset = preset.id
+      useCustomLimit = false
+    }
     if (input.name === 'count') {
       updated.count = Number(input.value) as Settings['count']
       if (updated.count === 100) copies = 1
@@ -338,10 +398,14 @@ app.addEventListener('change', (event) => {
       const generated = makeWorksheets(updated)
       settings = updated
       worksheets = generated
+      if (input.name !== 'preset' && ['limit', 'customLimit', 'operands', 'operation', 'additionRegrouping', 'subtractionRegrouping'].includes(input.name)) {
+        activePreset = 'custom'
+      }
     } catch (cause) {
       copies = previousCopies
       customLimit = previousCustomLimit
       useCustomLimit = previousUseCustomLimit
+      activePreset = previousPreset
       error = cause instanceof Error ? cause.message : '当前设置无法生成题目，请调整后重试。'
       render()
       return
