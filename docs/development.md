@@ -4,7 +4,7 @@
 
 试卷二维码使用版本号、出题设置和随机种子重建答案。`src/worksheet-link.ts` 管理解码和固定伪随机算法；v1～v3 使用 `src/generator.ts` 的旧版生成器，v4 使用 `src/advanced-generator.ts` 的混合题型生成器。已有版本的出题顺序、选项位掩码顺序和伪随机算法均不得改变；未来变化需新版本并保留旧解码。题型选项只可追加，不可重排。`src/problem-view.ts` 专门处理问题、答案和竖式展示。
 
-题型测试覆盖 12 类题的答案、范围和换算、缺项唯一性、填运算符歧义、进退位、混合比例、重复计数、v1～v4 链接和损坏链接。打印回归应分别检查带竖式的紧凑五列十行及普通两/三列卷面，五种底纹 × 50/100 题 × 答案开关，桌面与手机视口均须验证。
+题型测试覆盖 12 类题的答案、范围和换算、缺项唯一性、填运算符歧义、进退位、混合比例、重复计数、v1～v4 链接和损坏链接；`tests/fixtures/golden-worksheets.json` 固定两条种子回归；`print-templates.test.mjs` 检查打印页题量与转义。`tests/modules.mjs` 会编译 `src/problems/` 与相关 TypeScript 模块供 Node 测试使用。打印回归应分别检查带竖式的紧凑五列十行及普通两/三列卷面，五种底纹 × 50/100 题 × 答案开关，桌面与手机视口均须验证。
 
 首次使用时安装 [Gitleaks](https://github.com/gitleaks/gitleaks)（例如 macOS 上运行 `brew install gitleaks`），确认 `gitleaks version` 可运行。
 

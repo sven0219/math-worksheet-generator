@@ -1,42 +1,27 @@
 import './style.css'
-import QRCode from 'qrcode'
-import { generateMixedWorksheet, problemTypeOptions, allMultiplicationTables, type AppSettings } from './advanced-generator'
-import { decodeSheet, encodeSheet, seededRandom } from './worksheet-link'
-import { questionMarkup, verticalMarkup, answerMarkup, escapeHtml, worksheetColumnCount, worksheetSubtitle } from './problem-view'
+import { problemTypeOptions, allMultiplicationTables, type AppSettings } from './advanced-generator'
+import { decodeSheet } from './worksheet-link'
+import { escapeHtml } from './problem-view'
 import {
   type AdditionRegrouping,
   type OperandCount,
-  type ProblemType,
   type Settings,
   type SubtractionRegrouping,
-  type Worksheet,
 } from './generator'
 import {
   type PaperStyle,
   type PresetId,
   type SettingsTab,
-  additionRegroupingOptions,
-  lifeTypes,
-  limitPresets,
-  operationNames,
   operationSymbols,
-  paperStyles,
-  problemTypeSymbols,
   settingsPresets,
   settingsTabs,
-  specialtyTypes,
-  styleIcons,
   styleLabels,
-  subtractionRegroupingOptions,
 } from './ui-constants'
-
-interface SheetCopy { seed: number; worksheet: Worksheet }
-
-function newSeed(): number {
-  return typeof crypto !== 'undefined' && crypto.getRandomValues
-    ? crypto.getRandomValues(new Uint32Array(1))[0]
-    : Math.floor(Math.random() * 4294967296)
-}
+import { makeWorksheets, hasDuplicateCopies, type SheetCopy } from './worksheet-batch'
+import { loadQrImages, resolveSiteBase, sheetUrl } from './qr-images'
+import { answerPage, printPage, type PrintContext } from './print-templates'
+import { problemTypePicker, renderSettingsControls } from './settings-templates'
+import { renderSharedAnswersHtml } from './shared-answers-view'
 
 let settings: AppSettings = {
   count: 50,
@@ -55,12 +40,11 @@ let activeSettingsTab: SettingsTab = 'basics'
 let paperStyle: PaperStyle = 'plain'
 let includeAnswers = false
 let copies = 1
-let worksheets: SheetCopy[] = makeWorksheets()
+let worksheets: SheetCopy[] = makeWorksheets(settings, copies)
 let error = ''
 const homeUrl = new URL('.', window.location.href).href
-const siteBase = ['localhost', '127.0.0.1'].includes(window.location.hostname)
-  ? 'https://sven0219.github.io/math-worksheet-generator/'
-  : homeUrl
+const siteBase = resolveSiteBase(homeUrl)
+const isLocalDev = ['localhost', '127.0.0.1'].includes(window.location.hostname)
 const sharedSheet = decodeSheet(new URLSearchParams(window.location.search).get('sheet'))
 let qrImages: string[] = []
 let qrVersion = 0
@@ -70,100 +54,33 @@ if (new URLSearchParams(window.location.search).has('sheet') && !sharedSheet) {
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
-function choice(name: string, value: string | number, label: string, selected: boolean): string {
-  return `<label class="choice"><input type="radio" name="${name}" value="${value}" ${selected ? 'checked' : ''}><span>${label}</span></label>`
-}
-
-function presetChoice(id: PresetId, label: string, description: string): string {
-  return `<label class="preset-choice"><input type="radio" name="preset" value="${id}" ${activePreset === id ? 'checked' : ''}><span><b>${label}</b><small>${description}</small></span></label>`
-}
-
-function problemTypeChoice(type: ProblemType): string {
-  const label = problemTypeOptions.find(([candidate]) => candidate === type)?.[1] ?? type
-  return `<label class="type-choice"><input type="checkbox" name="problemType" value="${type}" ${settings.problemTypes.includes(type) ? 'checked' : ''}><span><b aria-hidden="true">${problemTypeSymbols[type]}</b>${label}</span></label>`
-}
-
-function problemTypePicker(): string {
-  return `<div class="selection-summary"><div class="selection-summary-title"><b>已选题型</b><span>${settings.problemTypes.length} 种 · ${settings.count} 题</span></div><div class="selected-types" role="group" aria-label="选择题型">${problemTypeOptions.map(([type, label]) => {
-    const selected = settings.problemTypes.includes(type)
-    return `<button type="button" class="${selected ? 'selected' : ''}" data-toggle-type="${type}" aria-pressed="${selected}"><span class="selected-type-icon" aria-hidden="true">${problemTypeSymbols[type]}</span><span>${label}</span><span class="selected-type-state" aria-hidden="true">${selected ? '✓' : '＋'}</span></button>`
-  }).join('')}</div><p>可跨标签多选，选中的题型会尽量均匀混合组卷。</p></div>`
-}
-
-function renderSettingsControls(): string {
-  const tabs = settingsTabs.map(([id, label, description]) =>
-    `<button type="button" role="tab" id="tab-${id}" class="settings-tab ${activeSettingsTab === id ? 'active' : ''}" data-tab="${id}" aria-controls="panel-${id}" aria-selected="${activeSettingsTab === id}" tabindex="${activeSettingsTab === id ? 0 : -1}"><b>${label}</b><small>${description}</small></button>`).join('')
-  const rangeContext = `<div class="range-context"><label><span>当前基础数字范围</span><select name="rangeShortcut" aria-label="当前基础数字范围">${limitPresets.map((limit) => `<option value="${limit}" ${!useCustomLimit && settings.limit === limit ? 'selected' : ''}>${limit} 以内</option>`).join('')}<option value="custom" ${useCustomLimit ? 'selected' : ''}>自定义${useCustomLimit ? `：${settings.limit} 以内` : '（详细设置）'}</option></select></label><p>用于口算、填空、比较、填运算符、竖式、有余数除法和小数；口诀、时间、人民币、单位和分数使用各自专项范围。</p></div>`
-  const basics = `<div class="settings-panel ${activeSettingsTab === 'basics' ? 'active' : ''}" data-panel="basics">
-    <div class="control-card preset-card"><div class="card-title"><span class="title-icon blue">A1</span><div><h3>现在学到哪儿？</h3><p>一键选择适合的练习难度</p></div></div><fieldset><legend>年级与难度预设</legend><div class="preset-grid">${settingsPresets.map((preset) =>
-      presetChoice(preset.id, preset.label, preset.description)).join('')}${presetChoice('custom', '自定义', '保留当前设置')}</div></fieldset><p class="preset-hint">预设只调整范围、运算和数字个数，选好后仍可继续修改。</p></div>
-    <div class="control-card"><div class="card-title"><span class="title-icon lavender">A2</span><div><h3>数字到哪里？</h3><p>基础数字范围的详细设置</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
-    <div class="control-card"><div class="card-title"><span class="title-icon mint">A3</span><div><h3>做什么运算？</h3><p>用于口算、填空和竖式</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
-      `<label class="choice op-choice"><input type="checkbox" name="operation" value="${operator}" ${settings.operations.includes(operator) ? 'checked' : ''}><span><b>${operator}</b>${operationNames[operator]}</span></label>`).join('')}</div></fieldset>
-      ${settings.operations.includes('+') ? `<fieldset class="regrouping-field"><legend>加法进位</legend><div class="choice-row compact-choices">${additionRegroupingOptions.map(([mode, label]) =>
-        choice('additionRegrouping', mode, label, settings.additionRegrouping === mode)).join('')}</div></fieldset>` : ''}
-      ${settings.operations.includes('−') ? `<fieldset class="regrouping-field"><legend>减法退位</legend><div class="choice-row compact-choices">${subtractionRegroupingOptions.map(([mode, label]) =>
-        choice('subtractionRegrouping', mode, label, settings.subtractionRegrouping === mode)).join('')}</div></fieldset>` : ''}
-      ${settings.operations.includes('+') || settings.operations.includes('−') ? '<p class="regrouping-hint">多数字题中的每一步都会遵守所选规则。</p>' : ''}
-      <fieldset><legend>每道口算题几个数字？</legend><div class="choice-row">${([2, 3, 4] as OperandCount[]).map((n) => choice('operands', n, `${n} 个`, settings.operands === n)).join('')}</div></fieldset></div>
-  </div>`
-  const types = `<div class="settings-panel ${activeSettingsTab === 'types' ? 'active' : ''}" data-panel="types">
-    <div class="control-card"><div class="card-title"><span class="title-icon peach">B1</span><div><h3>题型专项</h3><p>多选后平均分配并打乱</p></div></div><fieldset><legend>选择一种或多种题型</legend><div class="type-grid">${specialtyTypes.map(problemTypeChoice).join('')}</div></fieldset><p class="preset-hint">填空位置随机；比较题包含数字与算式；填运算符使用加减乘除。</p></div>
-    ${settings.problemTypes.includes('multiplication') ? `<div class="control-card"><div class="card-title"><span class="title-icon yellow">B2</span><div><h3>九九乘法专项</h3><p>乘法、除法和缺项正反练习</p></div></div><fieldset><legend>选择要练的口诀段</legend><div class="choice-row table-options">${allMultiplicationTables.map((table) =>
-      `<label class="choice"><input type="checkbox" name="multiplicationTable" value="${table}" ${settings.multiplicationTables.includes(table) ? 'checked' : ''}><span>${table} 的口诀</span></label>`).join('')}</div></fieldset><p class="preset-hint">口诀固定为 2～9，乘积不超过 81，不使用基础计算的数字上限。</p></div>` : ''}
-  </div>`
-  const life = `<div class="settings-panel ${activeSettingsTab === 'life' ? 'active' : ''}" data-panel="life">
-    <div class="control-card"><div class="card-title"><span class="title-icon mint">C1</span><div><h3>生活与拓展数学</h3><p>小学基础范围，适合综合复习</p></div></div><fieldset><legend>选择一种或多种题型</legend><div class="type-grid">${lifeTypes.map(problemTypeChoice).join('')}</div></fieldset></div>
-    <div class="control-card topic-guide"><h3>本组范围</h3><ul><li>整点、半点、30/60/90 分钟时长与时分换算</li><li>20 元以内元角分换算，换算后最多 2000 分</li><li>1～9 个长度/质量大单位的双向换算，最多 9000 小单位</li><li>同分母分数：分母 2～9，结果在 0～1；一位小数使用基础计算上限</li></ul><p>时间、人民币、单位和分数采用上述专项范围，不使用整数上限；小数不套用进退位规则。</p></div>
-  </div>`
-  const print = `<div class="settings-panel ${activeSettingsTab === 'print' ? 'active' : ''}" data-panel="print">
-    <div class="control-card"><div class="card-title"><span class="title-icon peach">D1</span><div><h3>今天练多少？</h3><p>每页始终排 50 题</p></div></div><fieldset><legend>每份题目数量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset><label class="custom-range">打印份数（每份题目不同）<input type="number" name="copies" min="1" max="10" step="1" value="${copies}" inputmode="numeric" ${settings.count === 100 ? 'disabled' : ''}></label>${settings.count === 100 ? '<p class="copies-hint">要打印多份不同试卷，请先选 50 题。</p>' : '<p class="copies-hint">每份 50 题，最多 10 份。</p>'}</div>
-    <div class="control-card"><div class="card-title"><span class="title-icon yellow">D2</span><div><h3>挑一张喜欢的纸</h3><p>每一种都适合写写算算</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
-      `<label class="style-choice"><input type="radio" name="style" value="${style}" ${paperStyle === style ? 'checked' : ''}><span><b aria-hidden="true">${styleIcons[style]}</b>${styleLabels[style]}</span></label>`).join('')}</div></fieldset></div>
-    <label class="answer-toggle"><input type="checkbox" name="answers" ${includeAnswers ? 'checked' : ''}><span><b>附上答案页</b><small>每份试卷各对应一张 A4 答案纸</small></span></label>
-  </div>`
-  const panels = `${basics}${types}${life}${print}`.replace(/data-panel="(basics|types|life|print)"/g, (_, id: SettingsTab) =>
-    `data-panel="${id}" id="panel-${id}" role="tabpanel" aria-labelledby="tab-${id}" ${activeSettingsTab === id ? '' : 'hidden'}`)
-  return `<nav class="settings-tabs" role="tablist" aria-label="设置分类">${tabs}</nav>${rangeContext}${panels}`
-}
-
-function makeWorksheets(worksheetSettings: AppSettings = settings): SheetCopy[] {
-  const result: SheetCopy[] = []
-  const signatures = new Set<string>()
-  for (let copy = 0; copy < copies; copy++) {
-    let seed = newSeed()
-    let worksheet = generateMixedWorksheet(worksheetSettings, seededRandom(seed))
-    let signature = [...new Set(worksheet.problems.map((problem) => problem.text))].sort().join('|')
-    for (let attempt = 0; attempt < 20 && signatures.has(signature); attempt++) {
-      seed = newSeed()
-      worksheet = generateMixedWorksheet(worksheetSettings, seededRandom(seed))
-      signature = [...new Set(worksheet.problems.map((problem) => problem.text))].sort().join('|')
-    }
-    signatures.add(signature)
-    result.push({ seed, worksheet })
+function settingsViewState() {
+  return {
+    settings,
+    customLimit,
+    useCustomLimit,
+    activePreset,
+    activeSettingsTab,
+    paperStyle,
+    includeAnswers,
+    copies,
   }
-  return result
 }
 
-function hasDuplicateCopies(): boolean {
-  const signatures = worksheets.map(({ worksheet }) =>
-    [...new Set(worksheet.problems.map((problem) => problem.text))].sort().join('|'))
-  return new Set(signatures).size < signatures.length
-}
-
-function sheetUrl(sheet: SheetCopy, copyIndex: number): string {
-  const url = new URL(siteBase)
-  url.searchParams.set('sheet', encodeSheet(settings, sheet.seed, copyIndex + 1))
-  return url.href
+function printContext(): PrintContext {
+  return {
+    settings,
+    paperStyle,
+    copies,
+    qrImages,
+    sheetUrlForCopy: (copyIndex) => sheetUrl(siteBase, settings, worksheets[copyIndex], copyIndex),
+  }
 }
 
 function updateQrImages(): void {
   const version = ++qrVersion
   qrImages = []
-  Promise.all(worksheets.map((sheet, index) => QRCode.toDataURL(sheetUrl(sheet, index), {
-    width: 140, margin: 2, errorCorrectionLevel: 'M',
-    color: { dark: '#292d5c', light: '#ffffff' },
-  }))).then((images) => {
+  loadQrImages(siteBase, settings, worksheets).then((images) => {
     if (version !== qrVersion) return
     qrImages = images
     render()
@@ -174,87 +91,26 @@ function updateQrImages(): void {
   })
 }
 
-function pagePattern(style: PaperStyle): string {
-  if (style === 'plain') return ''
-  // Real SVG strokes, not CSS backgrounds: they print without "background graphics".
-  const xs = Array.from({ length: 24 }, (_, i) => 12 + i * 8)
-  const ys = Array.from({ length: 35 }, (_, i) => 12 + i * 8)
-  const vertical = xs.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('')
-  const horizontal = ys.map((y) => `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const dots = xs.map((x) => ys.map((y) => `<circle cx="${x}" cy="${y}" r=".38"/>`).join('')).join('')
-  const tianzi = Array.from({ length: 13 }, (_, i) => 10 + i * 16).map((x) =>
-    `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
-    Array.from({ length: 19 }, (_, i) => 9 + i * 16).map((y) =>
-      `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const cross = Array.from({ length: 12 }, (_, i) => 18 + i * 16).map((x) =>
-    `<line class="pattern-dash" x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
-    Array.from({ length: 18 }, (_, i) => 17 + i * 16).map((y) =>
-      `<line class="pattern-dash" x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const contents = style === 'squares' ? vertical + horizontal
-    : style === 'lines' ? horizontal
-    : style === 'dots' ? dots : tianzi + cross
-  return `<svg class="page-pattern pattern-${style}" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true" focusable="false">${contents}</svg>`
-}
-
-function printPage(worksheet: Worksheet, page: number, copyIndex: number): string {
-  const start = page * 50
-  const problems = worksheet.problems.slice(start, start + 50)
-  const columnCount = worksheetColumnCount(problems, settings.operands, settings.limit)
-  const rows = Math.ceil(50 / columnCount)
-  const columns = Array.from({ length: columnCount }, (_, column) =>
-    problems.slice(column * rows, column * rows + rows))
-  return `<section class="paper paper-${paperStyle} ${columnCount === 5 ? 'compact-paper' : ''}" aria-label="试卷第 ${page + 1} 页">${pagePattern(paperStyle)}
-    <div class="paper-top">
-      <div class="paper-heading"><div><span class="paper-kicker">${copies > 1 ? `第 ${copyIndex + 1} 份 · ` : ''}今天也要加油呀！</span><h2>数学计算练习卷</h2></div><div class="paper-heading-right"><span class="paper-qr-hint">扫码看答案</span><div class="paper-qr-stack"><a class="paper-qr" href="${sheetUrl(worksheets[copyIndex], copyIndex)}" aria-label="扫码查看这份试卷的答案">${qrImages[copyIndex] ? `<img src="${qrImages[copyIndex]}" alt="扫码查看这份试卷的答案" width="90" height="90">` : '<span>二维码生成中</span>'}</a><span class="paper-page">${page + 1} / ${settings.count / 50}</span></div></div></div>
-      <p class="paper-subtitle">${worksheetSubtitle({ ...settings, operations: settings.operations.map((operation) => operationNames[operation]) })}</p>
-      <div class="student-fields"><span>姓名：<i></i></span><span>日期：<i></i></span><span>年级：<i></i></span><span>得分：<i></i></span><span>用时：<i></i> 分</span></div>
-    </div>
-    <div class="paper-columns" style="--question-columns:${columnCount};--question-rows:${rows}">${columns.map((column, columnIndex) => `<div class="problem-column">${column.map((problem, index) =>
-      `<div class="problem ${problem.vertical ? 'vertical-problem' : ''}" data-problem-type="${problem.type ?? 'calculation'}"><span class="problem-number">${start + columnIndex * rows + index + 1}.</span><span class="problem-expression">${problem.vertical ? verticalMarkup(problem) : questionMarkup(problem)}</span>${!problem.question ? '<span class="answer-area" aria-hidden="true"></span>' : ''}</div>`
-    ).join('')}</div>`).join('')}</div>
-    <div class="paper-foot">认真检查每一道题，你真棒！<span>✦ 小小数学家</span></div>
-  </section>`
-}
-
-function answerPage(worksheet: Worksheet, copyIndex: number): string {
-  const columns = Array.from({ length: settings.count / 25 }, (_, column) =>
-    worksheet.problems.slice(column * 25, column * 25 + 25))
-  return `<section class="paper answer-page" aria-label="参考答案（一张 A4）">
-    <div class="paper-top"><div class="paper-heading"><div><span class="paper-kicker">家长核对专用 · 与题目分开</span><h2>参考答案${copies > 1 ? ` · 第 ${copyIndex + 1} 份` : ''}</h2></div><span class="paper-page">${settings.count} 题</span></div>
-      <p class="paper-subtitle">按题号查找答案 · 多个空按顺序填写 · 分数可填等值形式 · 单独一张 A4</p></div>
-    <div class="answer-columns" style="--answer-columns:${columns.length}">${columns.map((column, columnIndex) =>
-      `<div class="answer-column">${column.map((problem, index) =>
-        `<div class="answer-row"><span>${columnIndex * 25 + index + 1}.</span><strong>${escapeHtml(problem.answer)}</strong></div>`
-      ).join('')}</div>`).join('')}</div>
-    <div class="paper-foot">答案页与题目分开打印<span>✦ 小小数学家</span></div>
-  </section>`
-}
-
-function renderSharedAnswers(): void {
-  if (!sharedSheet) return
-  const { sheet, settings: sharedSettings, copy } = sharedSheet
-  app.innerHTML = `<main class="shared-answers"><div class="shared-header"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div><a href="${homeUrl}">← 返回出题</a></div>
-    <div class="shared-intro"><span class="eyebrow">✦ 扫码核对答案</span><h1>这份练习卷的答案</h1><p>第 ${copy} 份 · ${sharedSettings.count} 道题。按试卷题号对照；多个空按顺序填写，分数的等值形式也正确。做错了也没关系，学会就好！</p><a class="shared-start" href="${homeUrl}">✦ 我要出题 <span aria-hidden="true">↗</span></a></div>
-    <div class="shared-grid" style="--answer-screen-columns:${sharedSettings.operands === 2 && sheet.worksheet.problems.every((problem) => !problem.question) ? 3 : 2}">${sheet.worksheet.problems.map((problem, index) =>
-      `<div class="shared-answer"><span class="shared-number">${index + 1}.</span><span class="shared-equation">${answerMarkup(problem)}</span></div>`
-    ).join('')}</div><p class="shared-footer">每一题认真思考，都是一次进步 ✨</p></main>`
-}
-
 function render(): void {
   if (sharedSheet) {
-    renderSharedAnswers()
+    app.innerHTML = renderSharedAnswersHtml(
+      { worksheet: sharedSheet.sheet.worksheet, settings: sharedSheet.settings, copy: sharedSheet.copy },
+      homeUrl,
+    )
     return
   }
+  const scrollTop = app.querySelector<HTMLElement>('.paper-scroll')?.scrollTop ?? 0
   const focused = document.activeElement
   const focusSelector = focused instanceof HTMLInputElement && app.contains(focused)
     ? `input[name="${CSS.escape(focused.name)}"][value="${CSS.escape(focused.value)}"]`
     : focused instanceof HTMLButtonElement && focused.dataset.tab ? `#tab-${focused.dataset.tab}` : null
   const pages = settings.count / 50
   const repeated = worksheets.reduce((total, { worksheet }) => total + worksheet.repeated, 0)
-  const duplicateCopies = hasDuplicateCopies()
+  const duplicateCopies = hasDuplicateCopies(worksheets)
   const qrPending = qrImages.length !== worksheets.length
   const printDisabled = duplicateCopies || qrPending
   const printLabel = qrPending ? '二维码准备中…' : '打印试卷'
+  const ctx = printContext()
   app.innerHTML = `<div class="screen-shell">
     <header class="hero"><div class="hero-inner"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div>
       <div class="hero-copy"><span class="eyebrow">✦ 每天练一点，进步看得见</span><h1>让数学练习，<br><em>变得有趣一点！</em></h1><p>选好题目，挑张喜欢的纸，打印一份专属练习卷。<br>今天也要为自己鼓掌呀！</p></div>
@@ -262,8 +118,8 @@ function render(): void {
     </div></header>
     <main class="workspace"><div class="workspace-heading"><div><span class="section-eyebrow">LET'S GET STARTED</span><h2>制作你的练习卷 <span aria-hidden="true">✏️</span></h2></div><p>简单几步，就能开始今天的数学冒险！</p></div>
       <div class="workspace-grid"><aside class="controls" aria-label="出题设置">
-        ${problemTypePicker()}
-        ${renderSettingsControls()}
+        ${problemTypePicker(settings)}
+        ${renderSettingsControls(settingsViewState())}
         ${error ? `<p class="status error" role="alert">${escapeHtml(error)}</p>` : ''}
         <button class="generate-button" type="button" data-action="generate">✦ &nbsp;生成新试卷</button>
       </aside>
@@ -271,11 +127,14 @@ function render(): void {
         ${repeated ? `<p class="status notice" role="status">当前设置可生成的不同题目不足，试卷中共有 ${repeated} 道重复题。试试增加数字范围、运算方式、数字个数，或放宽进退位规则吧。</p>` : ''}
         ${duplicateCopies ? '<p class="status error" role="alert">当前设置可用的不同题目太少，无法保证每份试卷不同。请扩大范围、增加运算方式、放宽进退位规则，或减少份数。</p>' : ''}
         ${settings.problemTypes.includes('vertical') ? `<p class="status notice">${settings.problemTypes.length === 1 ? '纯竖式按五列十行' : '混合卷按两列并压缩其中竖式'}排版，每页仍为 50 题；书写空间有限，复杂演算可另用草稿纸。</p>` : ''}
+        ${isLocalDev ? '<p class="status notice" role="status">本地预览时二维码指向 GitHub Pages，用手机扫码请部署站点或打开线上地址。</p>' : ''}
         <div class="preview-note">💡 &nbsp;打印时选择 A4 纸、100% 缩放，并关闭浏览器页眉和页脚；扫描每张试卷右上角的二维码，可在网页查看该份试卷的答案。</div>
-        <div class="paper-scroll">${worksheets.map(({ worksheet }, copyIndex) => Array.from({ length: pages }, (_, page) => printPage(worksheet, page, copyIndex)).join('')).join('')}${includeAnswers ? worksheets.map(({ worksheet }, copyIndex) => answerPage(worksheet, copyIndex)).join('') : ''}</div>
+        <div class="paper-scroll">${worksheets.map(({ worksheet }, copyIndex) => Array.from({ length: pages }, (_, page) => printPage(ctx, worksheet, page, copyIndex)).join('')).join('')}${includeAnswers ? worksheets.map(({ worksheet }, copyIndex) => answerPage(ctx, worksheet, copyIndex)).join('') : ''}</div>
       </section></div>
     </main><footer class="site-footer">用一点点练习，收集好多好多进步。 <span>✳ 小小数学家</span></footer>
   </div>`
+  const paperScroll = app.querySelector<HTMLElement>('.paper-scroll')
+  if (paperScroll) paperScroll.scrollTop = scrollTop
   if (focusSelector) app.querySelector<HTMLElement>(focusSelector)?.focus({ preventScroll: true })
 }
 
@@ -382,7 +241,7 @@ app.addEventListener('change', (event) => {
       }
     }
     try {
-      const generated = makeWorksheets(updated)
+      const generated = makeWorksheets(updated, copies)
       settings = updated
       worksheets = generated
       if (input.name !== 'preset' && ['limit', 'customLimit', 'operands', 'operation', 'additionRegrouping', 'subtractionRegrouping'].includes(input.name)) {
@@ -423,10 +282,10 @@ app.addEventListener('click', (event) => {
   }
   const button = (event.target as Element).closest<HTMLButtonElement>('[data-action]')
   if (!button) return
-  if (button.dataset.action === 'print' && !hasDuplicateCopies() && qrImages.length === worksheets.length) window.print()
+  if (button.dataset.action === 'print' && !hasDuplicateCopies(worksheets) && qrImages.length === worksheets.length) window.print()
   if (button.dataset.action === 'generate') {
     try {
-      worksheets = makeWorksheets()
+      worksheets = makeWorksheets(settings, copies)
     } catch (cause) {
       error = cause instanceof Error ? cause.message : '当前设置无法生成题目，请调整后重试。'
       render()

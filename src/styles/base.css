@@ -1,0 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap');
+
+:root{font-family:'DM Sans','Noto Sans SC',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;color:#26344c;background:#fff9f0;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased}
+*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer}h1,h2,h3,p{margin-top:0}fieldset{border:0;padding:0;margin:0}legend{font-size:13px;font-weight:700;color:#69758a;margin:0 0 11px}input:focus-visible+span,button:focus-visible{outline:3px solid #3520bc;outline-offset:3px}

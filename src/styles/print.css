@@ -1,0 +1,12 @@
+@media print{
+  html,body,#app{width:auto!important;margin:0!important;padding:0!important;background:white!important}
+  .screen-shell{min-height:0;overflow:visible}
+  .hero,.workspace-heading,.controls,.preview-toolbar,.preview-note,.status,.site-footer{display:none!important}
+  .workspace,.workspace-grid,.preview-section,.paper-scroll{display:block!important;width:auto!important;max-width:none!important;margin:0!important;padding:0!important;border:0!important;box-shadow:none!important;background:transparent!important;overflow:visible!important}
+  /* Do not fill the entire physical A4: iOS may add its own unprintable margins. */
+  .paper{width:100%!important;min-width:0!important;height:265mm!important;margin:0!important;padding:4mm 3mm 3mm!important;box-shadow:none!important;break-inside:avoid-page;page-break-inside:avoid;overflow:hidden!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* Break before the next sheet, never after the final one (which caused blank pages). */
+  .paper+.paper{break-before:page;page-break-before:always}
+  .paper-kicker,.paper-page,.paper-subtitle,.paper-foot,.problem-number{color:#666!important}
+  .student-fields{border-color:#bbb!important}
+}
