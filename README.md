@@ -33,6 +33,10 @@
 
 ![快速开始出题设置与试卷预览](docs/screenshots/home.png)
 
+**高级设置**（12 种题型、四标签页与八种纸张）
+
+![高级设置：题型选择与分类标签页](docs/screenshots/advanced.png)
+
 **数学方格底纹的 A4 试卷**（图中二维码仅作界面展示，实际打印时每份试卷的二维码都不同）
 
 ![数学方格底纹试卷，右上角有扫码看答案二维码](docs/screenshots/worksheet.png)
