@@ -2,6 +2,9 @@ export type Operation = '+' | '−' | '×' | '÷'
 export type OperandCount = 2 | 3 | 4
 export type AdditionRegrouping = 'any' | 'without-carry' | 'with-carry'
 export type SubtractionRegrouping = 'any' | 'without-borrow' | 'with-borrow'
+export type ProblemType =
+  | 'calculation' | 'missing' | 'comparison' | 'operator' | 'multiplication'
+  | 'vertical' | 'remainder' | 'time' | 'money' | 'unit' | 'fraction' | 'decimal'
 
 export interface Settings {
   count: 50 | 100
@@ -17,9 +20,13 @@ export type Expression =
   | { kind: 'operation'; operator: Operation; left: Expression; right: Expression; value: number }
 
 export interface Problem {
-  expression: Expression
+  expression?: Expression
   text: string
-  answer: number
+  answer: number | string
+  type?: ProblemType
+  question?: string
+  solution?: string
+  vertical?: { top: number; bottom: number; operator: Operation }
 }
 
 export interface Worksheet {
@@ -230,7 +237,7 @@ function makeLegacyProblem(settings: Settings, random: () => number): Problem {
 
 function keyFor(problem: Problem): string {
   const node = problem.expression
-  if (node.kind === 'operation' && node.left.kind === 'number' &&
+  if (node?.kind === 'operation' && node.left.kind === 'number' &&
       node.right.kind === 'number' && (node.operator === '+' || node.operator === '×')) {
     return `${node.operator}:${Math.min(node.left.value, node.right.value)}:${Math.max(node.left.value, node.right.value)}`
   }
@@ -274,6 +281,14 @@ function generate(
 export function generateWorksheet(settings: Settings, random: () => number = Math.random): Worksheet {
   return generate(settings, random, (currentSettings, currentRandom) =>
     makeProblem(currentSettings, currentRandom, true))
+}
+
+export function generateCalculationProblem(settings: Settings, random: () => number = Math.random): Problem {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const problem = makeProblem(settings, random, true)
+    if (problem) return problem
+  }
+  throw new Error('当前设置无法生成计算题，请放宽数字范围或进退位规则。')
 }
 
 export function generateWorksheetV2(settings: Settings, random: () => number = Math.random): Worksheet {
