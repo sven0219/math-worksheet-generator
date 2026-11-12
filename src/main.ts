@@ -142,10 +142,11 @@ function problemTypeChoice(type: ProblemType): string {
 function renderSettingsControls(): string {
   const tabs = settingsTabs.map(([id, label, description]) =>
     `<button type="button" role="tab" id="tab-${id}" class="settings-tab ${activeSettingsTab === id ? 'active' : ''}" data-tab="${id}" aria-controls="panel-${id}" aria-selected="${activeSettingsTab === id}" tabindex="${activeSettingsTab === id ? 0 : -1}"><b>${label}</b><small>${description}</small></button>`).join('')
+  const rangeContext = `<div class="range-context"><label><span>当前基础数字范围</span><select name="rangeShortcut" aria-label="当前基础数字范围">${limitPresets.map((limit) => `<option value="${limit}" ${!useCustomLimit && settings.limit === limit ? 'selected' : ''}>${limit} 以内</option>`).join('')}<option value="custom" ${useCustomLimit ? 'selected' : ''}>自定义${useCustomLimit ? `：${settings.limit} 以内` : '（详细设置）'}</option></select></label><p>用于口算、填空、比较、填运算符、竖式、有余数除法和小数；口诀、时间、人民币、单位和分数使用各自专项范围。</p></div>`
   const basics = `<div class="settings-panel ${activeSettingsTab === 'basics' ? 'active' : ''}" data-panel="basics">
     <div class="control-card preset-card"><div class="card-title"><span class="title-icon blue">A1</span><div><h3>现在学到哪儿？</h3><p>一键选择适合的练习难度</p></div></div><fieldset><legend>年级与难度预设</legend><div class="preset-grid">${settingsPresets.map((preset) =>
       presetChoice(preset.id, preset.label, preset.description)).join('')}${presetChoice('custom', '自定义', '保留当前设置')}</div></fieldset><p class="preset-hint">预设只调整范围、运算和数字个数，选好后仍可继续修改。</p></div>
-    <div class="control-card"><div class="card-title"><span class="title-icon lavender">A2</span><div><h3>数字到哪里？</h3><p>口算、填空、比较、竖式、小数的上限</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
+    <div class="control-card"><div class="card-title"><span class="title-icon lavender">A2</span><div><h3>数字到哪里？</h3><p>基础数字范围的详细设置</p></div></div><fieldset><legend>数字范围</legend><div class="choice-row range-options">${limitPresets.map((n) => choice('limit', n, `${n} 以内`, !useCustomLimit && settings.limit === n)).join('')}${choice('limit', 'custom', '自定义', useCustomLimit)}</div><label class="custom-range">自定义上限（2～200）<input type="number" name="customLimit" min="2" max="200" step="1" value="${customLimit}" inputmode="numeric"></label></fieldset></div>
     <div class="control-card"><div class="card-title"><span class="title-icon mint">A3</span><div><h3>做什么运算？</h3><p>用于口算、填空和竖式</p></div></div><fieldset><legend>运算方式（可多选）</legend><div class="choice-row operations">${operationSymbols.map((operator) =>
       `<label class="choice op-choice"><input type="checkbox" name="operation" value="${operator}" ${settings.operations.includes(operator) ? 'checked' : ''}><span><b>${operator}</b>${operationNames[operator]}</span></label>`).join('')}</div></fieldset>
       ${settings.operations.includes('+') ? `<fieldset class="regrouping-field"><legend>加法进位</legend><div class="choice-row compact-choices">${additionRegroupingOptions.map(([mode, label]) =>
@@ -172,7 +173,7 @@ function renderSettingsControls(): string {
   </div>`
   const panels = `${basics}${types}${life}${print}`.replace(/data-panel="(basics|types|life|print)"/g, (_, id: SettingsTab) =>
     `data-panel="${id}" id="panel-${id}" role="tabpanel" aria-labelledby="tab-${id}" ${activeSettingsTab === id ? '' : 'hidden'}`)
-  return `<nav class="settings-tabs" role="tablist" aria-label="设置分类">${tabs}</nav>${panels}`
+  return `<nav class="settings-tabs" role="tablist" aria-label="设置分类">${tabs}</nav>${rangeContext}${panels}`
 }
 
 function makeWorksheets(worksheetSettings: AppSettings = settings): SheetCopy[] {
@@ -435,6 +436,18 @@ app.addEventListener('change', (event) => {
   }
   error = ''
   render()
+})
+
+app.addEventListener('change', (event) => {
+  const select = event.target
+  if (!(select instanceof HTMLSelectElement) || select.name !== 'rangeShortcut') return
+  if (select.value === 'custom') {
+    activeSettingsTab = 'basics'
+    render()
+    app.querySelector<HTMLInputElement>('input[name="customLimit"]')?.focus({ preventScroll: true })
+    return
+  }
+  app.querySelector<HTMLInputElement>(`input[name="limit"][value="${select.value}"]`)?.click()
 })
 
 app.addEventListener('click', (event) => {
