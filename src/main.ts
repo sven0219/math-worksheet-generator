@@ -5,85 +5,30 @@ import { decodeSheet, encodeSheet, seededRandom } from './worksheet-link'
 import { questionMarkup, verticalMarkup, answerMarkup, escapeHtml, worksheetColumnCount, worksheetSubtitle } from './problem-view'
 import {
   type AdditionRegrouping,
-  type Operation,
   type OperandCount,
   type ProblemType,
   type Settings,
   type SubtractionRegrouping,
   type Worksheet,
 } from './generator'
-
-type PaperStyle = 'plain' | 'squares' | 'lines' | 'dots' | 'tianzi'
-type PresetId = 'preschool' | 'grade1-first' | 'grade1-second' | 'grade2' | 'custom'
-type SettingsTab = 'basics' | 'types' | 'life' | 'print'
-
-interface SettingsPreset {
-  id: Exclude<PresetId, 'custom'>
-  label: string
-  description: string
-  settings: Pick<Settings, 'limit' | 'operations' | 'operands' | 'additionRegrouping' | 'subtractionRegrouping'>
-}
-
-const styleLabels: Record<PaperStyle, string> = {
-  plain: '清爽白纸', squares: '数学方格', lines: '整齐横线',
-  dots: '点点阵列', tianzi: '田字格纸',
-}
-const styleIcons: Record<PaperStyle, string> = {
-  plain: '◻', squares: '▦', lines: '☷', dots: '⠿', tianzi: '田',
-}
-const operationNames: Record<Operation, string> = {
-  '+': '加法', '−': '减法', '×': '乘法', '÷': '除法',
-}
-const operationSymbols: Operation[] = ['+', '−', '×', '÷']
-const paperStyles: PaperStyle[] = ['plain', 'squares', 'lines', 'dots', 'tianzi']
-const additionRegroupingOptions: Array<[AdditionRegrouping, string]> = [
-  ['any', '随机'], ['without-carry', '不进位'], ['with-carry', '必须进位'],
-]
-const subtractionRegroupingOptions: Array<[SubtractionRegrouping, string]> = [
-  ['any', '随机'], ['without-borrow', '不退位'], ['with-borrow', '必须退位'],
-]
-const settingsPresets: SettingsPreset[] = [
-  {
-    id: 'preschool', label: '幼小衔接', description: '10 以内加减',
-    settings: {
-      limit: 10, operations: ['+', '−'], operands: 2,
-      additionRegrouping: 'any', subtractionRegrouping: 'any',
-    },
-  },
-  {
-    id: 'grade1-first', label: '一年级上', description: '20 以内加减',
-    settings: {
-      limit: 20, operations: ['+', '−'], operands: 2,
-      additionRegrouping: 'any', subtractionRegrouping: 'any',
-    },
-  },
-  {
-    id: 'grade1-second', label: '一年级下', description: '100 以内加减',
-    settings: {
-      limit: 100, operations: ['+', '−'], operands: 2,
-      additionRegrouping: 'any', subtractionRegrouping: 'any',
-    },
-  },
-  {
-    id: 'grade2', label: '二年级', description: '100 以内四则',
-    settings: {
-      limit: 100, operations: ['+', '−', '×', '÷'], operands: 2,
-      additionRegrouping: 'any', subtractionRegrouping: 'any',
-    },
-  },
-]
-const problemTypeSymbols: Record<ProblemType, string> = {
-  calculation: '＝', missing: '□', comparison: '＞', operator: '○', multiplication: '×',
-  vertical: '↕', time: '◷', money: '¥', unit: '↔', fraction: '½', decimal: '.1', remainder: '…',
-}
-const specialtyTypes: ProblemType[] = ['calculation', 'missing', 'comparison', 'operator', 'multiplication', 'vertical', 'remainder']
-const lifeTypes: ProblemType[] = ['time', 'money', 'unit', 'fraction', 'decimal']
-const settingsTabs: Array<[SettingsTab, string, string]> = [
-  ['basics', '基础计算', '范围与运算'],
-  ['types', '题型专项', '填空、口诀、竖式'],
-  ['life', '生活数学', '时间、单位、分数'],
-  ['print', '打印设置', '题量、纸张、答案'],
-]
+import {
+  type PaperStyle,
+  type PresetId,
+  type SettingsTab,
+  additionRegroupingOptions,
+  lifeTypes,
+  limitPresets,
+  operationNames,
+  operationSymbols,
+  paperStyles,
+  problemTypeSymbols,
+  settingsPresets,
+  settingsTabs,
+  specialtyTypes,
+  styleIcons,
+  styleLabels,
+  subtractionRegroupingOptions,
+} from './ui-constants'
 
 interface SheetCopy { seed: number; worksheet: Worksheet }
 
@@ -103,7 +48,6 @@ let settings: AppSettings = {
   problemTypes: ['calculation'],
   multiplicationTables: [...allMultiplicationTables],
 }
-const limitPresets = [5, 10, 20, 50, 100, 200]
 let customLimit = 200
 let useCustomLimit = false
 let activePreset: PresetId = 'grade1-first'
@@ -137,6 +81,13 @@ function presetChoice(id: PresetId, label: string, description: string): string 
 function problemTypeChoice(type: ProblemType): string {
   const label = problemTypeOptions.find(([candidate]) => candidate === type)?.[1] ?? type
   return `<label class="type-choice"><input type="checkbox" name="problemType" value="${type}" ${settings.problemTypes.includes(type) ? 'checked' : ''}><span><b aria-hidden="true">${problemTypeSymbols[type]}</b>${label}</span></label>`
+}
+
+function problemTypePicker(): string {
+  return `<div class="selection-summary"><div class="selection-summary-title"><b>已选题型</b><span>${settings.problemTypes.length} 种 · ${settings.count} 题</span></div><div class="selected-types" role="group" aria-label="选择题型">${problemTypeOptions.map(([type, label]) => {
+    const selected = settings.problemTypes.includes(type)
+    return `<button type="button" class="${selected ? 'selected' : ''}" data-toggle-type="${type}" aria-pressed="${selected}"><span class="selected-type-icon" aria-hidden="true">${problemTypeSymbols[type]}</span><span>${label}</span><span class="selected-type-state" aria-hidden="true">${selected ? '✓' : '＋'}</span></button>`
+  }).join('')}</div><p>可跨标签多选，选中的题型会尽量均匀混合组卷。</p></div>`
 }
 
 function renderSettingsControls(): string {
@@ -301,6 +252,9 @@ function render(): void {
   const pages = settings.count / 50
   const repeated = worksheets.reduce((total, { worksheet }) => total + worksheet.repeated, 0)
   const duplicateCopies = hasDuplicateCopies()
+  const qrPending = qrImages.length !== worksheets.length
+  const printDisabled = duplicateCopies || qrPending
+  const printLabel = qrPending ? '二维码准备中…' : '打印试卷'
   app.innerHTML = `<div class="screen-shell">
     <header class="hero"><div class="hero-inner"><div class="brand"><div class="brand-mark" aria-hidden="true">✳</div><span>小小数学家 <small>Math Club</small></span></div>
       <div class="hero-copy"><span class="eyebrow">✦ 每天练一点，进步看得见</span><h1>让数学练习，<br><em>变得有趣一点！</em></h1><p>选好题目，挑张喜欢的纸，打印一份专属练习卷。<br>今天也要为自己鼓掌呀！</p></div>
@@ -308,12 +262,12 @@ function render(): void {
     </div></header>
     <main class="workspace"><div class="workspace-heading"><div><span class="section-eyebrow">LET'S GET STARTED</span><h2>制作你的练习卷 <span aria-hidden="true">✏️</span></h2></div><p>简单几步，就能开始今天的数学冒险！</p></div>
       <div class="workspace-grid"><aside class="controls" aria-label="出题设置">
+        ${problemTypePicker()}
         ${renderSettingsControls()}
-        <div class="selection-summary"><b>已选 ${settings.problemTypes.length} 种题型 · ${settings.count} 题</b><div class="selected-types">${settings.problemTypes.map((type) => `<button type="button" data-remove-type="${type}" aria-label="取消${problemTypeOptions.find(([candidate]) => type === candidate)?.[1]}">${problemTypeOptions.find(([candidate]) => type === candidate)?.[1]} <span aria-hidden="true">×</span></button>`).join('')}</div><p>跨标签保留选择，尽量均匀混合组卷。</p></div>
         ${error ? `<p class="status error" role="alert">${escapeHtml(error)}</p>` : ''}
         <button class="generate-button" type="button" data-action="generate">✦ &nbsp;生成新试卷</button>
       </aside>
-       <section class="preview-section" aria-label="试卷预览"><div class="preview-toolbar"><div><span class="preview-label">✦ 实时预览</span><h3>你的专属练习卷</h3><p>${settings.count} 道题 × ${copies} 份 · ${pages * copies} 张题目 A4 · ${styleLabels[paperStyle]}</p></div><button class="print-button" type="button" data-action="print" ${duplicateCopies || qrImages.length !== worksheets.length ? 'disabled' : ''}>打印试卷 <span aria-hidden="true">↗</span></button></div>
+       <section class="preview-section" aria-label="试卷预览"><div class="preview-toolbar"><div><span class="preview-label">✦ 实时预览</span><h3>你的专属练习卷</h3><p>${settings.count} 道题 × ${copies} 份 · ${pages * copies} 张题目 A4 · ${styleLabels[paperStyle]}</p></div><button class="print-button" type="button" data-action="print" aria-busy="${qrPending}" aria-live="polite" ${printDisabled ? 'disabled' : ''}>${printLabel}${qrPending ? '' : ' <span aria-hidden="true">↗</span>'}</button></div>
         ${repeated ? `<p class="status notice" role="status">当前设置可生成的不同题目不足，试卷中共有 ${repeated} 道重复题。试试增加数字范围、运算方式、数字个数，或放宽进退位规则吧。</p>` : ''}
         ${duplicateCopies ? '<p class="status error" role="alert">当前设置可用的不同题目太少，无法保证每份试卷不同。请扩大范围、增加运算方式、放宽进退位规则，或减少份数。</p>' : ''}
         ${settings.problemTypes.includes('vertical') ? `<p class="status notice">${settings.problemTypes.length === 1 ? '纯竖式按五列十行' : '混合卷按两列并压缩其中竖式'}排版，每页仍为 50 题；书写空间有限，复杂演算可另用草稿纸。</p>` : ''}
@@ -326,8 +280,19 @@ function render(): void {
 }
 
 app.addEventListener('change', (event) => {
-  const input = event.target
-  if (!(input instanceof HTMLInputElement)) return
+  const target = event.target
+  if (target instanceof HTMLSelectElement && target.name === 'rangeShortcut') {
+    if (target.value === 'custom') {
+      activeSettingsTab = 'basics'
+      render()
+      app.querySelector<HTMLInputElement>('input[name="customLimit"]')?.focus({ preventScroll: true })
+      return
+    }
+    app.querySelector<HTMLInputElement>(`input[name="limit"][value="${target.value}"]`)?.click()
+    return
+  }
+  if (!(target instanceof HTMLInputElement)) return
+  const input = target
   if (input.name === 'style') {
     paperStyle = input.value as PaperStyle
   } else if (input.name === 'answers') {
@@ -438,18 +403,6 @@ app.addEventListener('change', (event) => {
   render()
 })
 
-app.addEventListener('change', (event) => {
-  const select = event.target
-  if (!(select instanceof HTMLSelectElement) || select.name !== 'rangeShortcut') return
-  if (select.value === 'custom') {
-    activeSettingsTab = 'basics'
-    render()
-    app.querySelector<HTMLInputElement>('input[name="customLimit"]')?.focus({ preventScroll: true })
-    return
-  }
-  app.querySelector<HTMLInputElement>(`input[name="limit"][value="${select.value}"]`)?.click()
-})
-
 app.addEventListener('click', (event) => {
   const element = event.target as Element
   const tab = element.closest<HTMLButtonElement>('[data-tab]')
@@ -459,11 +412,11 @@ app.addEventListener('click', (event) => {
     app.querySelector<HTMLButtonElement>(`[data-tab="${activeSettingsTab}"]`)?.focus({ preventScroll: true })
     return
   }
-  const remove = element.closest<HTMLButtonElement>('[data-remove-type]')
-  if (remove) {
-    const input = app.querySelector<HTMLInputElement>(`input[name="problemType"][value="${remove.dataset.removeType}"]`)
+  const typeToggle = element.closest<HTMLButtonElement>('[data-toggle-type]')
+  if (typeToggle) {
+    const input = app.querySelector<HTMLInputElement>(`input[name="problemType"][value="${typeToggle.dataset.toggleType}"]`)
     if (input) {
-      input.checked = false
+      input.checked = !input.checked
       input.dispatchEvent(new Event('change', { bubbles: true }))
     }
     return

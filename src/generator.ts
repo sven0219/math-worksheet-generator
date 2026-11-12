@@ -249,6 +249,7 @@ function generate(
   random: () => number,
   problemFactory: (settings: Settings, random: () => number) => Problem | null,
 ): Worksheet {
+  // v1–v3 QR links may encode limits up to 1000; the interactive UI caps new sheets at 200.
   if (!Number.isInteger(settings.limit) || settings.limit < 2 || settings.limit > 1000) {
     throw new Error('数字范围必须是 2 到 1000 之间的整数')
   }

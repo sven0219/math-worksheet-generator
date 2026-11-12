@@ -289,6 +289,7 @@ function keyFor(problem: Problem): string {
 }
 
 export function generateMixedWorksheet(settings: AppSettings, random: () => number = Math.random): Worksheet {
+  // v4 sheets and the settings UI share this 2–200 cap; legacy decoders in worksheet-link still accept larger v1–v3 limits.
   if (!Number.isInteger(settings.limit) || settings.limit < 2 || settings.limit > 200) {
     throw new Error('新试卷的数字范围必须是 2～200 的整数。')
   }
