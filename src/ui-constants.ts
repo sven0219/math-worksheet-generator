@@ -6,7 +6,8 @@ import type {
   SubtractionRegrouping,
 } from './generator'
 
-export type PaperStyle = 'plain' | 'squares' | 'lines' | 'dots' | 'tianzi'
+export type PaperStyle =
+  | 'plain' | 'squares' | 'large-squares' | 'lines' | 'double-lines' | 'dots' | 'tianzi' | 'mi'
 export type PresetId = 'preschool' | 'grade1-first' | 'grade1-second' | 'grade2' | 'custom'
 export type SettingsTab = 'basics' | 'types' | 'life' | 'print'
 
@@ -18,17 +19,21 @@ export interface SettingsPreset {
 }
 
 export const styleLabels: Record<PaperStyle, string> = {
-  plain: '清爽白纸', squares: '数学方格', lines: '整齐横线',
-  dots: '点点阵列', tianzi: '田字格纸',
+  plain: '清爽白纸', squares: '数学方格', 'large-squares': '大方格',
+  lines: '整齐横线', 'double-lines': '双线本',
+  dots: '点点阵列', tianzi: '田字格纸', mi: '米字格',
 }
 export const styleIcons: Record<PaperStyle, string> = {
-  plain: '◻', squares: '▦', lines: '☷', dots: '⠿', tianzi: '田',
+  plain: '◻', squares: '▦', 'large-squares': '▣', lines: '☷',
+  'double-lines': '═', dots: '⠿', tianzi: '田', mi: '米',
 }
 export const operationNames: Record<Operation, string> = {
   '+': '加法', '−': '减法', '×': '乘法', '÷': '除法',
 }
 export const operationSymbols: Operation[] = ['+', '−', '×', '÷']
-export const paperStyles: PaperStyle[] = ['plain', 'squares', 'lines', 'dots', 'tianzi']
+export const paperStyles: PaperStyle[] = [
+  'plain', 'squares', 'large-squares', 'lines', 'double-lines', 'dots', 'tianzi', 'mi',
+]
 export const additionRegroupingOptions: Array<[AdditionRegrouping, string]> = [
   ['any', '随机'], ['without-carry', '不进位'], ['with-carry', '必须进位'],
 ]

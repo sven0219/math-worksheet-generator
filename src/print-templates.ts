@@ -12,24 +12,67 @@ export interface PrintContext {
   sheetUrlForCopy: (copyIndex: number) => string
 }
 
+function gridLines(step: number, width = 210, height = 297): string {
+  const vertical = Array.from({ length: Math.floor(width / step) + 1 }, (_, index) => {
+    const x = index * step
+    return `<line x1="${x}" y1="0" x2="${x}" y2="${height}"/>`
+  }).join('')
+  const horizontal = Array.from({ length: Math.floor(height / step) + 1 }, (_, index) => {
+    const y = index * step
+    return `<line x1="0" y1="${y}" x2="${width}" y2="${y}"/>`
+  }).join('')
+  return vertical + horizontal
+}
+
+function miPattern(step = 16, width = 210, height = 297): string {
+  const cols = Math.floor(width / step)
+  const rows = Math.floor(height / step)
+  let diagonals = ''
+  for (let column = 0; column < cols; column++) {
+    for (let row = 0; row < rows; row++) {
+      const left = column * step
+      const top = row * step
+      const right = left + step
+      const bottom = top + step
+      diagonals += `<line class="pattern-dash" x1="${left}" y1="${top}" x2="${right}" y2="${bottom}"/>`
+      diagonals += `<line class="pattern-dash" x1="${right}" y1="${top}" x2="${left}" y2="${bottom}"/>`
+    }
+  }
+  return gridLines(step, width, height) + diagonals
+}
+
 export function pagePattern(style: PaperStyle): string {
   if (style === 'plain') return ''
   const xs = Array.from({ length: 24 }, (_, i) => 12 + i * 8)
   const ys = Array.from({ length: 35 }, (_, i) => 12 + i * 8)
-  const vertical = xs.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('')
-  const horizontal = ys.map((y) => `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const dots = xs.map((x) => ys.map((y) => `<circle cx="${x}" cy="${y}" r=".38"/>`).join('')).join('')
-  const tianzi = Array.from({ length: 13 }, (_, i) => 10 + i * 16).map((x) =>
-    `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
-    Array.from({ length: 19 }, (_, i) => 9 + i * 16).map((y) =>
-      `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const cross = Array.from({ length: 12 }, (_, i) => 18 + i * 16).map((x) =>
-    `<line class="pattern-dash" x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
-    Array.from({ length: 18 }, (_, i) => 17 + i * 16).map((y) =>
-      `<line class="pattern-dash" x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
-  const contents = style === 'squares' ? vertical + horizontal
-    : style === 'lines' ? horizontal
-    : style === 'dots' ? dots : tianzi + cross
+  let contents = ''
+  if (style === 'squares') {
+    contents = xs.map((x) => `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
+      ys.map((y) => `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
+  } else if (style === 'large-squares') {
+    contents = gridLines(20)
+  } else if (style === 'lines') {
+    contents = ys.map((y) => `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
+  } else if (style === 'double-lines') {
+    contents = Array.from({ length: 18 }, (_, index) => {
+      const y = 10 + index * 16
+      return `<line x1="0" y1="${y}" x2="210" y2="${y}"/><line class="pattern-rule" x1="0" y1="${y + 4.5}" x2="210" y2="${y + 4.5}"/>`
+    }).join('')
+  } else if (style === 'dots') {
+    contents = xs.map((x) => ys.map((y) => `<circle cx="${x}" cy="${y}" r=".38"/>`).join('')).join('')
+  } else if (style === 'tianzi') {
+    const tianzi = Array.from({ length: 13 }, (_, i) => 10 + i * 16).map((x) =>
+      `<line x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
+      Array.from({ length: 19 }, (_, i) => 9 + i * 16).map((y) =>
+        `<line x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
+    const cross = Array.from({ length: 12 }, (_, i) => 18 + i * 16).map((x) =>
+      `<line class="pattern-dash" x1="${x}" y1="0" x2="${x}" y2="297"/>`).join('') +
+      Array.from({ length: 18 }, (_, i) => 17 + i * 16).map((y) =>
+        `<line class="pattern-dash" x1="0" y1="${y}" x2="210" y2="${y}"/>`).join('')
+    contents = tianzi + cross
+  } else {
+    contents = miPattern()
+  }
   return `<svg class="page-pattern pattern-${style}" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true" focusable="false">${contents}</svg>`
 }
 
