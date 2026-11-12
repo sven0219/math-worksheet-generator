@@ -3,6 +3,7 @@ import type { OperandCount, ProblemType } from './generator'
 import {
   type PaperStyle,
   type PresetId,
+  type SettingsMode,
   type SettingsTab,
   additionRegroupingOptions,
   lifeTypes,
@@ -11,6 +12,7 @@ import {
   operationSymbols,
   paperStyles,
   problemTypeSymbols,
+  quickPaperStyles,
   settingsPresets,
   settingsTabs,
   specialtyTypes,
@@ -25,6 +27,7 @@ export interface SettingsViewState {
   useCustomLimit: boolean
   activePreset: PresetId
   activeSettingsTab: SettingsTab
+  settingsMode: SettingsMode
   paperStyle: PaperStyle
   includeAnswers: boolean
   copies: number
@@ -43,6 +46,22 @@ function problemTypeChoice(settings: AppSettings, type: ProblemType): string {
   return `<label class="type-choice"><input type="checkbox" name="problemType" value="${type}" ${settings.problemTypes.includes(type) ? 'checked' : ''}><span><b aria-hidden="true">${problemTypeSymbols[type]}</b>${label}</span></label>`
 }
 
+function presetLabel(activePreset: PresetId): string {
+  if (activePreset === 'custom') return '自定义'
+  return settingsPresets.find(({ id }) => id === activePreset)?.label ?? '自定义'
+}
+
+function quickSummary(state: SettingsViewState): string {
+  const { settings, paperStyle, activePreset } = state
+  const typeText = settings.problemTypes.length === 1 && settings.problemTypes[0] === 'calculation'
+    ? '口算'
+    : problemTypeOptions
+      .filter(([type]) => settings.problemTypes.includes(type))
+      .map(([, label]) => label)
+      .join('、')
+  return `${presetLabel(activePreset)} · ${settings.limit} 以内 · ${settings.count} 题 · ${typeText} · ${styleLabels[paperStyle]}`
+}
+
 export function problemTypePicker(settings: AppSettings): string {
   return `<div class="selection-summary"><div class="selection-summary-title"><b>已选题型</b><span>${settings.problemTypes.length} 种 · ${settings.count} 题</span></div><div class="selected-types" role="group" aria-label="选择题型">${problemTypeOptions.map(([type, label]) => {
     const selected = settings.problemTypes.includes(type)
@@ -50,7 +69,32 @@ export function problemTypePicker(settings: AppSettings): string {
   }).join('')}</div><p>可跨标签多选，选中的题型会尽量均匀混合组卷。</p></div>`
 }
 
-export function renderSettingsControls(state: SettingsViewState): string {
+function renderModeSwitch(settingsMode: SettingsMode): string {
+  return `<div class="settings-mode-switch" role="tablist" aria-label="设置难度">
+    <button type="button" class="settings-mode ${settingsMode === 'quick' ? 'active' : ''}" data-settings-mode="quick" role="tab" aria-selected="${settingsMode === 'quick'}"><b>快速开始</b><small>选年级就能印</small></button>
+    <button type="button" class="settings-mode ${settingsMode === 'advanced' ? 'active' : ''}" data-settings-mode="advanced" role="tab" aria-selected="${settingsMode === 'advanced'}"><b>高级设置</b><small>题型、范围与纸张</small></button>
+  </div>`
+}
+
+function renderQuickStart(state: SettingsViewState): string {
+  const { settings, activePreset, paperStyle } = state
+  const quickPaperNote = quickPaperStyles.includes(paperStyle)
+    ? ''
+    : `<p class="preset-hint">当前纸张为「${styleLabels[paperStyle]}」，可在高级设置中更换其它样式。</p>`
+  return `<div class="quick-start">
+    <div class="quick-intro" role="status">
+      <b>不用改设置也能用</b>
+      <p>当前：<strong>${quickSummary(state)}</strong>。右侧已是可打印预览；不满意再点「生成新试卷」换一套题。</p>
+    </div>
+    <div class="control-card preset-card"><div class="card-title"><span class="title-icon blue">1</span><div><h3>孩子几年级？</h3><p>点一下，自动配好范围和运算</p></div></div><fieldset><legend>年级与难度</legend><div class="preset-grid">${settingsPresets.map((preset) =>
+      presetChoice(activePreset, preset.id, preset.label, preset.description)).join('')}</div></fieldset></div>
+    <div class="control-card"><div class="card-title"><span class="title-icon peach">2</span><div><h3>练多少题？</h3></div></div><fieldset><legend>题量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset></div>
+    <div class="control-card"><div class="card-title"><span class="title-icon yellow">3</span><div><h3>用什么纸？</h3><p>更多样式在高级设置</p></div></div><fieldset><legend>常用纸张</legend><div class="style-grid quick-style-grid">${quickPaperStyles.map((style) =>
+      `<label class="style-choice"><input type="radio" name="style" value="${style}" ${paperStyle === style ? 'checked' : ''}><span><b aria-hidden="true">${styleIcons[style]}</b>${styleLabels[style]}</span></label>`).join('')}</div></fieldset>${quickPaperNote}<p class="preset-hint">要混合题型、多份试卷或田字格/米字格等？请切到「高级设置」。</p></div>
+  </div>`
+}
+
+function renderAdvancedSettings(state: SettingsViewState): string {
   const { settings, customLimit, useCustomLimit, activePreset, activeSettingsTab, paperStyle, includeAnswers, copies } = state
   const tabs = settingsTabs.map(([id, label, description]) =>
     `<button type="button" role="tab" id="tab-${id}" class="settings-tab ${activeSettingsTab === id ? 'active' : ''}" data-tab="${id}" aria-controls="panel-${id}" aria-selected="${activeSettingsTab === id}" tabindex="${activeSettingsTab === id ? 0 : -1}"><b>${label}</b><small>${description}</small></button>`).join('')
@@ -79,11 +123,17 @@ export function renderSettingsControls(state: SettingsViewState): string {
   </div>`
   const print = `<div class="settings-panel ${activeSettingsTab === 'print' ? 'active' : ''}" data-panel="print">
     <div class="control-card"><div class="card-title"><span class="title-icon peach">D1</span><div><h3>今天练多少？</h3><p>每页始终排 50 题</p></div></div><fieldset><legend>每份题目数量</legend><div class="choice-row">${[50, 100].map((n) => choice('count', n, `${n} 题`, settings.count === n)).join('')}</div></fieldset><label class="custom-range">打印份数（每份题目不同）<input type="number" name="copies" min="1" max="10" step="1" value="${copies}" inputmode="numeric" ${settings.count === 100 ? 'disabled' : ''}></label>${settings.count === 100 ? '<p class="copies-hint">要打印多份不同试卷，请先选 50 题。</p>' : '<p class="copies-hint">每份 50 题，最多 10 份。</p>'}</div>
-    <div class="control-card"><div class="card-title"><span class="title-icon yellow">D2</span><div><h3>挑一张喜欢的纸</h3><p>每一种都适合写写算算</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
+    <div class="control-card"><div class="card-title"><span class="title-icon yellow">D2</span><div><h3>挑一张喜欢的纸</h3><p>共八种整页底纹</p></div></div><fieldset><legend>卷面样式</legend><div class="style-grid">${paperStyles.map((style) =>
       `<label class="style-choice"><input type="radio" name="style" value="${style}" ${paperStyle === style ? 'checked' : ''}><span><b aria-hidden="true">${styleIcons[style]}</b>${styleLabels[style]}</span></label>`).join('')}</div></fieldset></div>
     <label class="answer-toggle"><input type="checkbox" name="answers" ${includeAnswers ? 'checked' : ''}><span><b>附上答案页</b><small>每份试卷各对应一张 A4 答案纸</small></span></label>
   </div>`
   const panels = `${basics}${types}${life}${print}`.replace(/data-panel="(basics|types|life|print)"/g, (_, id: SettingsTab) =>
     `data-panel="${id}" id="panel-${id}" role="tabpanel" aria-labelledby="tab-${id}" ${activeSettingsTab === id ? '' : 'hidden'}`)
-  return `<nav class="settings-tabs" role="tablist" aria-label="设置分类">${tabs}</nav>${rangeContext}${panels}`
+  return `${problemTypePicker(settings)}<nav class="settings-tabs" role="tablist" aria-label="设置分类">${tabs}</nav>${rangeContext}${panels}`
+}
+
+export function renderSettingsControls(state: SettingsViewState): string {
+  const mode = renderModeSwitch(state.settingsMode)
+  if (state.settingsMode === 'quick') return mode + renderQuickStart(state)
+  return mode + renderAdvancedSettings(state)
 }

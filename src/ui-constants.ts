@@ -10,6 +10,9 @@ export type PaperStyle =
   | 'plain' | 'squares' | 'large-squares' | 'lines' | 'double-lines' | 'dots' | 'tianzi' | 'mi'
 export type PresetId = 'preschool' | 'grade1-first' | 'grade1-second' | 'grade2' | 'custom'
 export type SettingsTab = 'basics' | 'types' | 'life' | 'print'
+export type SettingsMode = 'quick' | 'advanced'
+
+export const quickPaperStyles: PaperStyle[] = ['plain', 'squares', 'lines']
 
 export interface SettingsPreset {
   id: Exclude<PresetId, 'custom'>

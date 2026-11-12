@@ -11,6 +11,7 @@ import {
 import {
   type PaperStyle,
   type PresetId,
+  type SettingsMode,
   type SettingsTab,
   operationSymbols,
   settingsPresets,
@@ -20,7 +21,7 @@ import {
 import { makeWorksheets, hasDuplicateCopies, type SheetCopy } from './worksheet-batch'
 import { loadQrImages, resolveSiteBase, sheetUrl } from './qr-images'
 import { answerPage, printPage, type PrintContext } from './print-templates'
-import { problemTypePicker, renderSettingsControls } from './settings-templates'
+import { renderSettingsControls } from './settings-templates'
 import { renderSharedAnswersHtml } from './shared-answers-view'
 
 let settings: AppSettings = {
@@ -37,6 +38,7 @@ let customLimit = 200
 let useCustomLimit = false
 let activePreset: PresetId = 'grade1-first'
 let activeSettingsTab: SettingsTab = 'basics'
+let settingsMode: SettingsMode = 'quick'
 let paperStyle: PaperStyle = 'plain'
 let includeAnswers = false
 let copies = 1
@@ -61,6 +63,7 @@ function settingsViewState() {
     useCustomLimit,
     activePreset,
     activeSettingsTab,
+    settingsMode,
     paperStyle,
     includeAnswers,
     copies,
@@ -103,7 +106,8 @@ function render(): void {
   const focused = document.activeElement
   const focusSelector = focused instanceof HTMLInputElement && app.contains(focused)
     ? `input[name="${CSS.escape(focused.name)}"][value="${CSS.escape(focused.value)}"]`
-    : focused instanceof HTMLButtonElement && focused.dataset.tab ? `#tab-${focused.dataset.tab}` : null
+    : focused instanceof HTMLButtonElement && focused.dataset.tab ? `#tab-${focused.dataset.tab}`
+    : focused instanceof HTMLButtonElement && focused.dataset.settingsMode ? `[data-settings-mode="${focused.dataset.settingsMode}"]` : null
   const pages = settings.count / 50
   const repeated = worksheets.reduce((total, { worksheet }) => total + worksheet.repeated, 0)
   const duplicateCopies = hasDuplicateCopies(worksheets)
@@ -118,7 +122,6 @@ function render(): void {
     </div></header>
     <main class="workspace"><div class="workspace-heading"><div><span class="section-eyebrow">LET'S GET STARTED</span><h2>制作你的练习卷 <span aria-hidden="true">✏️</span></h2></div><p>简单几步，就能开始今天的数学冒险！</p></div>
       <div class="workspace-grid"><aside class="controls" aria-label="出题设置">
-        ${problemTypePicker(settings)}
         ${renderSettingsControls(settingsViewState())}
         ${error ? `<p class="status error" role="alert">${escapeHtml(error)}</p>` : ''}
         <button class="generate-button" type="button" data-action="generate">✦ &nbsp;生成新试卷</button>
@@ -142,6 +145,7 @@ app.addEventListener('change', (event) => {
   const target = event.target
   if (target instanceof HTMLSelectElement && target.name === 'rangeShortcut') {
     if (target.value === 'custom') {
+      settingsMode = 'advanced'
       activeSettingsTab = 'basics'
       render()
       app.querySelector<HTMLInputElement>('input[name="customLimit"]')?.focus({ preventScroll: true })
@@ -264,6 +268,13 @@ app.addEventListener('change', (event) => {
 
 app.addEventListener('click', (event) => {
   const element = event.target as Element
+  const modeBtn = element.closest<HTMLButtonElement>('[data-settings-mode]')
+  if (modeBtn?.dataset.settingsMode === 'quick' || modeBtn?.dataset.settingsMode === 'advanced') {
+    settingsMode = modeBtn.dataset.settingsMode
+    render()
+    modeBtn.focus({ preventScroll: true })
+    return
+  }
   const tab = element.closest<HTMLButtonElement>('[data-tab]')
   if (tab && settingsTabs.some(([id]) => id === tab.dataset.tab)) {
     activeSettingsTab = tab.dataset.tab as SettingsTab
